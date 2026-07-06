@@ -124,13 +124,36 @@ class Match(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     season: Mapped[int]
-    round: Mapped[str] = mapped_column(String(20))  # "1".."27", "QF", "SF", "PF", "GF"
+    round: Mapped[str] = mapped_column(String(20))  # "1".."27", "QF", "EF", "SF", "PF", "GF"
+    # Local calendar date at the venue. kickoff_utc additionally needs the
+    # venue's timezone (Vegas, NZ, and no-DST Queensland make a blanket
+    # AEST assumption wrong), so it stays null until that mapping exists;
+    # rest-day features should use match_date.
+    match_date: Mapped[date | None] = mapped_column(Date)
     kickoff_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     home_team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"))
     away_team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"))
     venue_id: Mapped[int | None] = mapped_column(ForeignKey("venues.id"))
     home_score: Mapped[int | None]  # null until the match has been played
     away_score: Mapped[int | None]
+    source: Mapped[str] = mapped_column(String(50))
+    source_key: Mapped[str] = mapped_column(String(100))
+
+
+class MatchSourceKey(Base):
+    """A source's identifier for a match we already hold canonically.
+
+    matches.source/source_key records who created the row (rugbyleagueproject);
+    additional sources (nrl.com, betfair, tab) attach their ids here after
+    reconciliation so their data can be joined without re-matching by
+    teams/date every time.
+    """
+
+    __tablename__ = "match_source_keys"
+    __table_args__ = (UniqueConstraint("source", "source_key"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    match_id: Mapped[int] = mapped_column(ForeignKey("matches.id"), index=True)
     source: Mapped[str] = mapped_column(String(50))
     source_key: Mapped[str] = mapped_column(String(100))
 

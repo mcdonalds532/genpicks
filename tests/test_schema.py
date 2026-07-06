@@ -24,6 +24,7 @@ def test_all_tables_created(session):
         "players",
         "player_aliases",
         "matches",
+        "match_source_keys",
         "player_match_stats",
         "try_events",
         "odds_snapshots",

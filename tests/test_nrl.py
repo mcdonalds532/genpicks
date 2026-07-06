@@ -1,0 +1,220 @@
+"""NRL.com parser and loader tests against real saved JSON.
+
+The 2025 fixtures are the same real match as the RLP fixtures (the Vegas
+opener, Raiders v Warriors), so the ingest test exercises genuine
+cross-source reconciliation: RLP creates the canonical rows, then the NRL
+loader must attach to them without creating duplicates.
+"""
+
+from datetime import date, datetime, timezone
+from pathlib import Path
+
+import pytest
+from sqlalchemy import create_engine, func, select
+from sqlalchemy.orm import Session
+
+from genpicks.db.models import (
+    Base,
+    Match,
+    MatchSourceKey,
+    Player,
+    PlayerAlias,
+    PlayerMatchStats,
+    TryEvent,
+)
+from genpicks.ingest.nrl_loader import load_nrl_match
+from genpicks.ingest.rlp_loader import load_match_detail, load_season_rows
+from genpicks.scrape import nrl, rlp
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+@pytest.fixture(scope="module")
+def draw():
+    return nrl.parse_draw(
+        (FIXTURES / "nrl-draw-2025-round-1.json").read_text(encoding="utf-8")
+    )
+
+
+@pytest.fixture(scope="module")
+def vegas_detail():
+    return nrl.parse_match(
+        (FIXTURES / "nrl-match-2025-raiders-v-warriors.json").read_text(encoding="utf-8")
+    )
+
+
+# -- parsers -----------------------------------------------------------------
+
+
+def test_parse_draw(draw):
+    assert len(draw.fixtures) == 8
+    assert draw.round_numbers[0] == 1 and len(draw.round_numbers) >= 27
+    f = draw.fixtures[0]
+    assert f.match_centre_path == "/draw/nrl-premiership/2025/round-1/raiders-v-warriors/"
+    assert f.kickoff_utc == datetime(2025, 3, 2, 0, 0, tzinfo=timezone.utc)
+    assert (f.home_nickname, f.home_score) == ("Raiders", 30)
+    assert (f.away_nickname, f.away_score) == ("Warriors", 8)
+    assert f.is_played
+    assert (f.venue_name, f.venue_city) == ("Allegiant Stadium", "Las Vegas")
+
+
+def test_parse_match_2025(vegas_detail):
+    d = vegas_detail
+    assert d.match_id == "20251110110"
+    assert d.start_time_utc == datetime(2025, 3, 2, 0, 0, tzinfo=timezone.utc)
+    assert len(d.squads) == 36  # 18-player squads listed per side
+    assert len(d.player_stats) == 36
+    # timeline tries arrive in scoring order with times: 5 + 2 = 7 tries
+    assert len(d.tries) == 7
+    seconds = [t.game_seconds for t in d.tries]
+    assert seconds == sorted(seconds)
+    assert all(t.player_id is not None and t.team_id is not None for t in d.tries)
+
+    weekes = next(s for s in d.player_stats if s.player_id == 507846)
+    assert weekes.stats["allRunMetres"] == 128
+    assert weekes.stats["minutesPlayed"] == 80
+
+
+def test_parse_match_2016_has_same_shape():
+    d = nrl.parse_match(
+        (FIXTURES / "nrl-match-2016-eels-v-broncos.json").read_text(encoding="utf-8")
+    )
+    assert d.match_id == "20161110110"
+    assert d.start_time_utc == datetime(2016, 3, 3, 9, 5, tzinfo=timezone.utc)
+    assert len(d.tries) == 4
+    assert d.player_stats and "tacklesMade" in d.player_stats[0].stats
+
+
+def test_cache_path_from_match_centre_url():
+    assert (
+        nrl.match_cache_path("/draw/nrl-premiership/2016/round-1/eels-v-broncos/")
+        == "nrl/matches/2016/round-1/eels-v-broncos.json"
+    )
+
+
+# -- cross-source ingest -----------------------------------------------------
+
+
+@pytest.fixture()
+def session_with_rlp_data():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        html = (FIXTURES / "rlp-nrl-2025-results.html").read_text(encoding="utf-8")
+        matches = load_season_rows(session, rlp.parse_season_results(html, 2025))
+        detail = rlp.parse_match(
+            (FIXTURES / "rlp-match-103171.html").read_text(encoding="utf-8"), "103171"
+        )
+        load_match_detail(session, matches["103171"], detail)
+        session.commit()
+        yield session, matches["103171"]
+
+
+def test_nrl_attaches_to_rlp_match(session_with_rlp_data, draw, vegas_detail):
+    session, match = session_with_rlp_data
+    players_before = session.scalar(select(func.count()).select_from(Player))
+
+    assert load_nrl_match(session, 2025, draw.fixtures[0], vegas_detail)
+    session.commit()
+
+    # reconciled onto the existing match, recorded in match_source_keys
+    key = session.scalar(
+        select(MatchSourceKey).where(MatchSourceKey.source == "nrl")
+    )
+    assert key.match_id == match.id
+    assert key.source_key == "20251110110"
+
+    # UTC kickoff filled; local date unchanged (Vegas: UTC date differs)
+    session.refresh(match)
+    assert match.kickoff_utc is not None
+    assert match.kickoff_utc.date() == date(2025, 3, 2)
+    assert match.match_date == date(2025, 3, 1)
+
+    # no duplicate players: every NRL squad member matched an RLP appearance
+    players_after = session.scalar(select(func.count()).select_from(Player))
+    assert players_after == players_before
+
+    # stats filled onto the RLP-created rows
+    kris = session.scalar(
+        select(PlayerAlias).where(PlayerAlias.source == "rlp", PlayerAlias.alias == "28599")
+    )
+    kris_nrl = session.scalar(
+        select(PlayerAlias).where(PlayerAlias.source == "nrl", PlayerAlias.alias == "504148")
+    )
+    assert kris_nrl is not None and kris_nrl.player_id == kris.player_id
+    kris_stats = session.scalar(
+        select(PlayerMatchStats).where(
+            PlayerMatchStats.match_id == match.id,
+            PlayerMatchStats.player_id == kris.player_id,
+        )
+    )
+    assert kris_stats.tries == 2
+    assert kris_stats.minutes_played is not None
+    assert kris_stats.run_metres is not None
+    assert kris_stats.tackles is not None
+
+    # try events rebuilt with scoring order; first try is Sebastian Kris
+    events = list(
+        session.scalars(
+            select(TryEvent)
+            .where(TryEvent.match_id == match.id)
+            .order_by(TryEvent.scoring_order)
+        )
+    )
+    assert [e.scoring_order for e in events] == [1, 2, 3, 4, 5, 6, 7]
+    assert events[0].player_id == kris.player_id
+    assert events[0].minute == 5  # 316 gameSeconds
+    home_tries = sum(1 for e in events if e.team_id == match.home_team_id)
+    assert home_tries == 5
+
+
+def test_incomplete_timeline_keeps_rlp_tries_and_skips_try_order(
+    session_with_rlp_data, draw, vegas_detail
+):
+    # Old NRL.com feeds can miss tries (observed in 2017). If the timeline
+    # doesn't account for every RLP try, keep RLP counts and write no order.
+    import dataclasses
+
+    session, match = session_with_rlp_data
+    crippled = dataclasses.replace(vegas_detail, tries=vegas_detail.tries[:-1])
+    assert load_nrl_match(session, 2025, draw.fixtures[0], crippled)
+    session.commit()
+
+    assert session.scalar(select(func.count()).select_from(TryEvent)) == 0
+    kris = session.scalar(
+        select(PlayerAlias).where(PlayerAlias.source == "rlp", PlayerAlias.alias == "28599")
+    )
+    kris_stats = session.scalar(
+        select(PlayerMatchStats).where(
+            PlayerMatchStats.match_id == match.id,
+            PlayerMatchStats.player_id == kris.player_id,
+        )
+    )
+    assert kris_stats.tries == 2  # RLP scoresheet value untouched
+    assert kris_stats.run_metres is not None  # other stats still merged
+
+    # a later run with the full timeline heals the match
+    assert load_nrl_match(session, 2025, draw.fixtures[0], vegas_detail)
+    session.commit()
+    assert session.scalar(select(func.count()).select_from(TryEvent)) == 7
+
+
+def test_nrl_ingest_is_idempotent(session_with_rlp_data, draw, vegas_detail):
+    session, match = session_with_rlp_data
+    assert load_nrl_match(session, 2025, draw.fixtures[0], vegas_detail)
+    session.commit()
+    counts_first = (
+        session.scalar(select(func.count()).select_from(Player)),
+        session.scalar(select(func.count()).select_from(TryEvent)),
+        session.scalar(select(func.count()).select_from(PlayerMatchStats)),
+        session.scalar(select(func.count()).select_from(MatchSourceKey)),
+    )
+    assert load_nrl_match(session, 2025, draw.fixtures[0], vegas_detail)
+    session.commit()
+    counts_second = (
+        session.scalar(select(func.count()).select_from(Player)),
+        session.scalar(select(func.count()).select_from(TryEvent)),
+        session.scalar(select(func.count()).select_from(PlayerMatchStats)),
+        session.scalar(select(func.count()).select_from(MatchSourceKey)),
+    )
+    assert counts_first == counts_second
