@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environment / secrets
+.env
+
+# Local data (raw scrapes and dev database are rebuildable, never committed)
+data/raw/*
+!data/raw/.gitkeep
+data/*.db
+
+# Node (frontend, later phases)
+node_modules/
+.next/
+
+# OS / editor
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/
