@@ -95,16 +95,22 @@ def _roll_season(state: _TeamState, season: int) -> None:
         state.season_games = 0
 
 
-def build_match_dataset(engine: Engine) -> pd.DataFrame:
-    """One row per played match, chronological, features strictly pre-match."""
+def build_match_dataset(engine: Engine, include_unplayed: bool = False) -> pd.DataFrame:
+    """One row per match, chronological, features strictly pre-match.
+
+    Unplayed fixtures (include_unplayed=True) are snapshotted with the same
+    pre-match state but never update it, so they can be scored for serving
+    without touching the training path.
+    """
     with Session(engine) as session:
-        matches = list(
-            session.scalars(
-                select(Match)
-                .where(Match.home_score.is_not(None), Match.match_date.is_not(None))
-                .order_by(Match.match_date, Match.kickoff_utc, Match.id)
-            )
+        query = (
+            select(Match)
+            .where(Match.match_date.is_not(None))
+            .order_by(Match.match_date, Match.kickoff_utc, Match.id)
         )
+        if not include_unplayed:
+            query = query.where(Match.home_score.is_not(None))
+        matches = list(session.scalars(query))
 
     states: dict[int, _TeamState] = {}
     rows = []
@@ -136,6 +142,9 @@ def build_match_dataset(engine: Engine) -> pd.DataFrame:
         row.update(_snapshot(away, "away", match.match_date, match.season))
         row["elo_diff"] = home.elo - away.elo
         rows.append(row)
+
+        if match.home_score is None:
+            continue  # unplayed fixture: snapshot only, never update state
 
         # ---- update state AFTER snapshotting (leakage barrier) ----
         outcome_home = (

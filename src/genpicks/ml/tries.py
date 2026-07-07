@@ -58,8 +58,15 @@ class TryData:
     first_scorers: dict[int, int]  # match_id -> player_id of try #1
 
 
-def load_try_data(engine: Engine) -> TryData:
+def load_try_data(engine: Engine, include_unplayed: bool = False) -> TryData:
     with Session(engine) as session:
+        query = (
+            select(Match)
+            .where(Match.match_date.is_not(None))
+            .order_by(Match.match_date, Match.kickoff_utc, Match.id)
+        )
+        if not include_unplayed:
+            query = query.where(Match.home_score.is_not(None))
         matches = pd.DataFrame(
             [
                 {
@@ -69,12 +76,9 @@ def load_try_data(engine: Engine) -> TryData:
                     "match_date": m.match_date,
                     "home_team_id": m.home_team_id,
                     "away_team_id": m.away_team_id,
+                    "played": m.home_score is not None,
                 }
-                for m in session.scalars(
-                    select(Match)
-                    .where(Match.home_score.is_not(None), Match.match_date.is_not(None))
-                    .order_by(Match.match_date, Match.kickoff_utc, Match.id)
-                )
+                for m in session.scalars(query)
             ]
         )
         appearances = pd.read_sql(
@@ -156,9 +160,16 @@ def build_team_try_dataset(data: TryData) -> pd.DataFrame:
                         if team.season_games
                         else None
                     ),
-                    "tries": team_tries.get((match.match_id, team_id), 0),
+                    "tries": (
+                        team_tries.get((match.match_id, team_id), 0)
+                        if match.played
+                        else None
+                    ),
                 }
             )
+        if not match.played:
+            continue  # unplayed fixture: snapshot only, never update state
+
         # ---- update AFTER both teams' rows are snapshotted ----
         home_tries = team_tries.get((match.match_id, match.home_team_id), 0)
         away_tries = team_tries.get((match.match_id, match.away_team_id), 0)
@@ -278,3 +289,39 @@ def build_share_dataset(
     totals = frame.groupby(["match_id", "team_id"])["share_raw"].transform("sum")
     frame["share"] = frame["share_raw"] / totals
     return frame
+
+
+def current_shares(
+    data: TryData,
+    priors: dict[str, float],
+    fallback_prior: float,
+    lineup: list[tuple[int, str | None]],  # (player_id, position)
+) -> dict[int, float]:
+    """Raw share estimate per player as of now (all played history).
+
+    Same formula as build_share_dataset but evaluated after the last played
+    match, for serving. Caller renormalises over the lineup.
+    """
+    team_tries = (
+        data.appearances.groupby(["match_id", "team_id"])["tries"].sum().to_dict()
+    )
+    mean_team_tries = sum(team_tries.values()) / len(team_tries) if team_tries else 0.0
+    pseudo = SHARE_ALPHA * mean_team_tries
+    order = {m: i for i, m in enumerate(data.matches["match_id"])}
+    apps = data.appearances.sort_values("match_id", key=lambda s: s.map(order))
+
+    shares = {}
+    for player_id, position in lineup:
+        history = apps[apps["player_id"] == player_id].tail(SHARE_WINDOW)
+        hist_player = int(history["tries"].sum())
+        hist_team = sum(
+            team_tries.get((m, t), 0)
+            for m, t in zip(history["match_id"], history["team_id"])
+        )
+        prior = priors.get(position or "Unknown", fallback_prior)
+        shares[player_id] = (
+            (hist_player + prior * pseudo) / (hist_team + pseudo)
+            if (hist_team + pseudo) > 0
+            else prior
+        )
+    return shares

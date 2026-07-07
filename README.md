@@ -4,7 +4,18 @@ Machine-learning predictions for NRL matches: win probabilities, anytime
 try-scorer and first try-scorer probabilities per player, converted to implied
 betting odds and compared against live market prices.
 
-**Status: phase 1 — data foundations.**
+**Status: phases 1–5 complete** — full data pipeline (2016–2026, three
+sources), trained models, and a serving API. Next: frontend, live odds
+pollers.
+
+Headline numbers on the held-out 2024–26 test seasons:
+
+- match winner: **0.6498 log loss vs 0.6454 for bookmaker closing odds**
+  (Elo-only 0.6533, always-home 0.6821), 557 matches
+- first try scorer: top-1 hit rate 9.0%, top-3 24.3% (uniform lineup: 2.9%),
+  534 matches with verified try order
+- anytime try: log loss 0.4253 over 20,396 player-appearances, well
+  calibrated below 50%
 
 ## Architecture
 
@@ -36,15 +47,39 @@ copy .env.example .env
 To use Postgres instead, start it (`docker compose up -d db` or a free
 Neon/Supabase instance) and set `GENPICKS_DATABASE_URL` in `.env`.
 
+## Pipeline commands
+
+```powershell
+# download raw pages (cache-first; resumable; ~1h per source first time)
+.venv\Scripts\python -m genpicks.scrape --seasons 2016-2026
+.venv\Scripts\python -m genpicks.scrape --source nrl --seasons 2016-2026
+# aussportsbetting closing odds: manual browser download to data\raw\asb\nrl.xlsx
+# (the site is Cloudflare-protected; see src/genpicks/scrape/asb.py)
+
+# load into the database — order matters: rlp creates canonical rows,
+# nrl attaches stats/try order, asb attaches closing odds
+.venv\Scripts\python -m genpicks.ingest --seasons 2016-2026
+.venv\Scripts\python -m genpicks.ingest --source nrl --seasons 2016-2026
+.venv\Scripts\python -m genpicks.ingest --source asb --seasons 2016-2026
+
+# train (writes versioned artifacts + evaluation reports to data/models/)
+.venv\Scripts\python -m genpicks.ml.train
+.venv\Scripts\python -m genpicks.ml.train_tries
+
+# score upcoming fixtures (append-only predictions table) and serve
+.venv\Scripts\python -m genpicks.ml.predict
+.venv\Scripts\uvicorn genpicks.api.main:app
+```
+
 ## Roadmap
 
 1. ~~Foundations: repo, schema, migrations~~
-2. Data pipeline: scrapers, raw landing zone, validated transforms, backfill ~10 seasons
-3. Match-winner model with calibration, backtested against bookmaker closing odds
-4. Try-scorer models (team Poisson rates × player shares; first-try derived)
-5. FastAPI serving layer with weekly batch prediction jobs
+2. ~~Data pipeline: scrapers, raw landing zone, validated transforms, backfill ~10 seasons~~
+3. ~~Match-winner model with calibration, backtested against bookmaker closing odds~~
+4. ~~Try-scorer models (team Poisson rates × player shares; first-try derived)~~
+5. ~~FastAPI serving layer with batch prediction jobs~~
 6. Next.js frontend: fixtures, match detail, prediction track record
-7. Odds pollers (Betfair, TAB) and model-vs-market edge display
+7. Odds pollers (Betfair, TAB) and model-vs-market edge display; official team lists
 8. Auth + Stripe subscription gating
 9. Deployment, docs, responsible-gambling disclaimer
 
