@@ -69,6 +69,9 @@ Neon/Supabase instance) and set `GENPICKS_DATABASE_URL` in `.env`.
 # score upcoming fixtures (append-only predictions table) and serve
 .venv\Scripts\python -m genpicks.ml.predict
 .venv\Scripts\uvicorn genpicks.api.main:app
+
+# frontend (web/): expects the API; set API_URL if not on :8000
+cd web; npm install; npm run dev
 ```
 
 ## Roadmap
@@ -78,7 +81,7 @@ Neon/Supabase instance) and set `GENPICKS_DATABASE_URL` in `.env`.
 3. ~~Match-winner model with calibration, backtested against bookmaker closing odds~~
 4. ~~Try-scorer models (team Poisson rates × player shares; first-try derived)~~
 5. ~~FastAPI serving layer with batch prediction jobs~~
-6. Next.js frontend: fixtures, match detail, prediction track record
+6. ~~Next.js frontend: fixtures, match detail, prediction track record~~
 7. Odds pollers (Betfair, TAB) and model-vs-market edge display; official team lists
 8. Auth + Stripe subscription gating
 9. Deployment, docs, responsible-gambling disclaimer
