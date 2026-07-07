@@ -10,10 +10,12 @@ __pycache__/
 # Environment / secrets
 .env
 
-# Local data (raw scrapes and dev database are rebuildable, never committed)
+# Local data (raw scrapes, dev database and model artifacts are rebuildable,
+# never committed)
 data/raw/*
 !data/raw/.gitkeep
 data/*.db
+data/models/
 
 # Node (frontend, later phases)
 node_modules/

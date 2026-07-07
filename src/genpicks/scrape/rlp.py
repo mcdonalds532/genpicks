@@ -39,6 +39,7 @@ _MONTHS = {
 _FINALS_ROUNDS = {
     "Qualif Final": "QF",
     "Elim Final": "EF",
+    "Elim Qualif": "EF",  # 2023 finals week 1 variant
     "Semi Final": "SF",
     "Prelim Final": "PF",
     "Grand Final": "GF",

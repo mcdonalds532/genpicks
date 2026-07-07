@@ -115,4 +115,5 @@ def test_normalize_round():
     assert rlp.normalize_round("Round 1") == "1"
     assert rlp.normalize_round("Round 5 - Multicultural Round") == "5"
     assert rlp.normalize_round("Qualif Final") == "QF"
+    assert rlp.normalize_round("Elim Qualif") == "EF"  # 2023 finals variant
     assert rlp.normalize_round("Grand Final") == "GF"
