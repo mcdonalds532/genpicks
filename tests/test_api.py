@@ -9,7 +9,15 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from genpicks.api.main import app, get_session
-from genpicks.db.models import Base, Match, Player, Prediction, Team, Venue
+from genpicks.db.models import (
+    Base,
+    Match,
+    OddsSnapshot,
+    Player,
+    Prediction,
+    Team,
+    Venue,
+)
 
 TODAY = date.today()
 
@@ -74,6 +82,25 @@ def client():
                            generated_at=now, lineup_source="official"),
             ]
         )
+        session.add_all(
+            [
+                # stale snapshot that must not be served
+                OddsSnapshot(source="oddsapi", market="h2h", match_id=2, team_id=2,
+                             selection_name="Beta", price_decimal=1.9,
+                             captured_at=now - timedelta(hours=6),
+                             raw={"bookmaker": "tab", "title": "TAB"}),
+                # newest snapshot: two bookmakers, best price per team wins
+                OddsSnapshot(source="oddsapi", market="h2h", match_id=2, team_id=2,
+                             selection_name="Beta", price_decimal=1.8,
+                             captured_at=now, raw={"bookmaker": "tab", "title": "TAB"}),
+                OddsSnapshot(source="oddsapi", market="h2h", match_id=2, team_id=2,
+                             selection_name="Beta", price_decimal=1.85, captured_at=now,
+                             raw={"bookmaker": "sportsbet", "title": "SportsBet"}),
+                OddsSnapshot(source="oddsapi", market="h2h", match_id=2, team_id=1,
+                             selection_name="Alpha", price_decimal=2.1,
+                             captured_at=now, raw={"bookmaker": "tab", "title": "TAB"}),
+            ]
+        )
         session.commit()
 
     def override():
@@ -117,6 +144,19 @@ def test_match_markets_serve_newest_generation_only(client):
     assert [e["probability"] for e in body["first_try"]] == [0.1]
     assert body["lineup_source"] == "official"
     assert client.get("/matches/999/markets").status_code == 404
+
+
+def test_market_odds_serve_newest_snapshot_best_price(client):
+    for body in (
+        client.get("/matches/2/markets").json(),
+        client.get("/matches/upcoming").json()[0],
+    ):
+        odds = body["market_odds"]
+        # match 2 has Beta at home; best of 1.8 (TAB) / 1.85 (SportsBet),
+        # the stale 1.9 snapshot is not served
+        assert odds["home"] == {"price": 1.85, "bookmaker": "SportsBet"}
+        assert odds["away"] == {"price": 2.1, "bookmaker": "TAB"}
+        assert odds["bookmakers"] == 2
 
 
 def test_track_record_scores_settled_predictions(client):

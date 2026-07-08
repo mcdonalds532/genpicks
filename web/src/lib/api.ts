@@ -21,7 +21,15 @@ export type UpcomingMatch = {
   win_probabilities:
     | ({ model_version: string } & { home?: WinProbability; away?: WinProbability })
     | null;
+  market_odds: MarketOdds;
 };
+
+export type MarketOdds = {
+  home: { price: number; bookmaker: string | null } | null;
+  away: { price: number; bookmaker: string | null } | null;
+  bookmakers: number;
+  captured_at: string;
+} | null;
 
 export type PlayerMarketEntry = {
   player: string | null;
@@ -38,6 +46,7 @@ export type MatchMarkets = {
   h2h: { home?: WinProbability; away?: WinProbability };
   anytime_try: PlayerMarketEntry[];
   first_try: PlayerMarketEntry[];
+  market_odds: MarketOdds;
   lineup_source: "official" | "projected" | null;
 };
 

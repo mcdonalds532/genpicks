@@ -5,6 +5,7 @@ Usage:
     python -m genpicks.ingest --source nrl --seasons 2016-2026   # NRL.com
     python -m genpicks.ingest --source asb --seasons 2016-2026   # closing odds
     python -m genpicks.ingest --source nrl-teamlists --seasons 2026  # team lists
+    python -m genpicks.ingest --source oddsapi                   # odds snapshots
 
 Reads only from data/raw/ (never the network). Match pages the backfill has
 not downloaded yet are skipped and picked up on the next run — ingest and
@@ -20,10 +21,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from genpicks.config import get_settings
-from genpicks.scrape import asb, nrl, rlp
+from genpicks.scrape import asb, nrl, oddsapi, rlp
 from genpicks.scrape.backfill import parse_seasons
 from genpicks.ingest.asb_loader import load_asb_odds
 from genpicks.ingest.nrl_loader import load_nrl_match, load_team_list
+from genpicks.ingest.oddsapi_loader import load_odds_events
 from genpicks.ingest.rlp_loader import load_match_detail, load_season_rows
 
 logger = logging.getLogger(__name__)
@@ -106,11 +108,28 @@ def ingest_nrl_teamlists(
     return loaded, skipped
 
 
+def ingest_oddsapi(session: Session, raw_root: Path) -> tuple[int, int, int]:
+    """Replay every snapshot the DB has not seen. Returns (rows, matched, unmatched)."""
+    snapshot_dir = raw_root / f"oddsapi/{oddsapi.SPORT_KEY}"
+    total_rows = total_matched = total_unmatched = 0
+    for snapshot_file in sorted(snapshot_dir.glob("*.json")) if snapshot_dir.exists() else []:
+        events = oddsapi.parse_snapshot(snapshot_file.read_text(encoding="utf-8"))
+        rows, matched, unmatched = load_odds_events(
+            session, events, oddsapi.captured_at_from_path(snapshot_file)
+        )
+        total_rows += rows
+        total_matched += matched
+        total_unmatched += unmatched
+    return total_rows, total_matched, total_unmatched
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", choices=("rlp", "nrl", "nrl-teamlists", "asb"),
+    parser.add_argument("--source",
+                        choices=("rlp", "nrl", "nrl-teamlists", "asb", "oddsapi"),
                         default="rlp")
-    parser.add_argument("--seasons", required=True, help='e.g. "2016-2026"')
+    parser.add_argument("--seasons", default=None,
+                        help='e.g. "2016-2026" (not used by oddsapi)')
     parser.add_argument("--raw-root", type=Path, default=Path("data/raw"))
     parser.add_argument("--database-url", default=None,
                         help="defaults to GENPICKS_DATABASE_URL / settings")
@@ -119,6 +138,14 @@ def main(argv: list[str] | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     engine = create_engine(args.database_url or get_settings().database_url)
     with Session(engine) as session:
+        if args.source == "oddsapi":
+            rows, matched, unmatched = ingest_oddsapi(session, args.raw_root)
+            session.commit()
+            logger.info("oddsapi: %d snapshot rows added (%d events matched, "
+                        "%d unmatched)", rows, matched, unmatched)
+            return
+        if args.seasons is None:
+            parser.error(f"--seasons is required for --source {args.source}")
         if args.source == "asb":
             workbook = args.raw_root / asb.DEFAULT_PATH
             if not workbook.exists():

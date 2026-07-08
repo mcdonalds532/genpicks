@@ -4,6 +4,7 @@ Usage:
     python -m genpicks.scrape --seasons 2016-2025                # RLP (default)
     python -m genpicks.scrape --source nrl --seasons 2016-2025   # NRL.com JSON
     python -m genpicks.scrape --source nrl-teamlists --seasons 2026  # team lists
+    python -m genpicks.scrape --source oddsapi                   # one odds poll
     python -m genpicks.scrape --seasons 2025 --limit 5           # smoke test
     python -m genpicks.scrape --seasons 2025 --skip-matches
 
@@ -17,7 +18,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from genpicks.scrape import nrl, rlp
+from genpicks.config import get_settings
+from genpicks.scrape import nrl, oddsapi, rlp
 from genpicks.scrape.fetch import Fetcher
 
 logger = logging.getLogger(__name__)
@@ -160,9 +162,10 @@ def backfill_nrl_teamlists(
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", choices=("rlp", "nrl", "nrl-teamlists"),
+    parser.add_argument("--source", choices=("rlp", "nrl", "nrl-teamlists", "oddsapi"),
                         default="rlp")
-    parser.add_argument("--seasons", required=True, help='e.g. "2016-2025" or "2025"')
+    parser.add_argument("--seasons", default=None,
+                        help='e.g. "2016-2025" or "2025" (not used by oddsapi)')
     parser.add_argument("--raw-root", type=Path, default=Path("data/raw"))
     parser.add_argument("--skip-matches", action="store_true",
                         help="only fetch season/draw pages")
@@ -173,6 +176,18 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    if args.source == "oddsapi":
+        api_key = get_settings().odds_api_key
+        if not api_key:
+            parser.error(
+                "set GENPICKS_ODDS_API_KEY (free key from the-odds-api.com)"
+            )
+        target, events, remaining = oddsapi.poll(api_key, args.raw_root)
+        logger.info("odds snapshot: %d events -> %s (%s credits left this month)",
+                    events, target, remaining if remaining is not None else "?")
+        return
+    if args.seasons is None:
+        parser.error(f"--seasons is required for --source {args.source}")
     if args.source == "nrl-teamlists":
         fetcher = Fetcher(args.raw_root, headers=nrl.JSON_HEADERS)
         for season in parse_seasons(args.seasons):

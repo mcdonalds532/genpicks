@@ -24,11 +24,14 @@ from genpicks.db.models import (
     MARKET_FIRST_TRY,
     MARKET_H2H,
     Match,
+    OddsSnapshot,
     Player,
     Prediction,
     Team,
     Venue,
 )
+
+LIVE_ODDS_SOURCE = "oddsapi"
 
 app = FastAPI(title="GenPicks", version="0.1.0")
 app.add_middleware(
@@ -71,6 +74,53 @@ def _latest_h2h(session: Session, match_ids: list[int]) -> dict[int, list[Predic
     return grouped
 
 
+def _latest_market_odds(session: Session, match_ids: list[int]) -> dict[int, dict]:
+    """Per match: the newest live-odds snapshot, condensed to the best
+    (highest) decimal price per team across bookmakers."""
+    rows = list(
+        session.scalars(
+            select(OddsSnapshot).where(
+                OddsSnapshot.match_id.in_(match_ids),
+                OddsSnapshot.source == LIVE_ODDS_SOURCE,
+                OddsSnapshot.market == MARKET_H2H,
+            )
+        )
+    )
+    newest = {}
+    for row in rows:
+        if row.match_id not in newest or row.captured_at > newest[row.match_id]:
+            newest[row.match_id] = row.captured_at
+    out: dict[int, dict] = {}
+    for row in rows:
+        if row.captured_at != newest[row.match_id] or row.team_id is None:
+            continue
+        entry = out.setdefault(
+            row.match_id, {"captured_at": row.captured_at.isoformat(), "teams": {}}
+        )
+        best = entry["teams"].get(row.team_id)
+        if best is None or float(row.price_decimal) > best["price"]:
+            entry["teams"][row.team_id] = {
+                "price": float(row.price_decimal),
+                "bookmaker": (row.raw or {}).get("title"),
+            }
+        entry["bookmakers"] = len(
+            {(r.raw or {}).get("bookmaker") for r in rows
+             if r.match_id == row.match_id and r.captured_at == newest[row.match_id]}
+        )
+    return out
+
+
+def _sided_odds(odds: dict | None, match: Match) -> dict | None:
+    if odds is None:
+        return None
+    return {
+        "home": odds["teams"].get(match.home_team_id),
+        "away": odds["teams"].get(match.away_team_id),
+        "bookmakers": odds.get("bookmakers", 0),
+        "captured_at": odds["captured_at"],
+    }
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -89,6 +139,7 @@ def upcoming_matches(limit: int = 20, session: Session = Depends(get_session)):
     teams = {t.id: t.name for t in session.scalars(select(Team))}
     venues = {v.id: v.name for v in session.scalars(select(Venue))}
     h2h = _latest_h2h(session, [m.id for m in matches])
+    market_odds = _latest_market_odds(session, [m.id for m in matches])
 
     out = []
     for m in matches:
@@ -102,6 +153,7 @@ def upcoming_matches(limit: int = 20, session: Session = Depends(get_session)):
             "away_team": teams.get(m.away_team_id),
             "venue": venues.get(m.venue_id),
             "win_probabilities": None,
+            "market_odds": _sided_odds(market_odds.get(m.id), m),
         }
         if m.id in h2h:
             probs = {
@@ -173,6 +225,9 @@ def match_markets(match_id: int, top: int = 10,
         },
         "anytime_try": anytime,
         "first_try": first,
+        "market_odds": _sided_odds(
+            _latest_market_odds(session, [match_id]).get(match_id), match
+        ),
         # "official": published team lists; "projected": each team's most
         # recent played lineup (team lists not out yet)
         "lineup_source": anytime_source or first_source,

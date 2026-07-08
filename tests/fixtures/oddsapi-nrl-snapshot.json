@@ -1,0 +1,68 @@
+[
+  {
+    "id": "e1f0a9c2b3d4e5f60718293a4b5c6d7e",
+    "sport_key": "rugbyleague_nrl",
+    "sport_title": "NRL",
+    "commence_time": "2026-07-10T10:00:00Z",
+    "home_team": "Wests Tigers",
+    "away_team": "New Zealand Warriors",
+    "bookmakers": [
+      {
+        "key": "sportsbet",
+        "title": "SportsBet",
+        "last_update": "2026-07-07T21:40:11Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-07-07T21:40:11Z",
+            "outcomes": [
+              { "name": "Wests Tigers", "price": 4.6 },
+              { "name": "New Zealand Warriors", "price": 1.2 }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "tab",
+        "title": "TAB",
+        "last_update": "2026-07-07T21:39:02Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-07-07T21:39:02Z",
+            "outcomes": [
+              { "name": "Wests Tigers", "price": 4.4 },
+              { "name": "New Zealand Warriors", "price": 1.22 },
+              { "name": "Draw", "price": 41.0 }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+    "sport_key": "rugbyleague_nrl",
+    "sport_title": "NRL",
+    "commence_time": "2026-07-11T05:00:00Z",
+    "home_team": "Cronulla Sharks",
+    "away_team": "Dolphins",
+    "bookmakers": [
+      {
+        "key": "sportsbet",
+        "title": "SportsBet",
+        "last_update": "2026-07-07T21:40:11Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-07-07T21:40:11Z",
+            "outcomes": [
+              { "name": "Cronulla Sharks", "price": 2.35 },
+              { "name": "Dolphins", "price": 1.6 }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

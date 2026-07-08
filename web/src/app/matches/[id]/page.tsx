@@ -5,6 +5,7 @@ import {
   getMatchMarkets,
   type PlayerMarketEntry,
 } from "@/lib/api";
+import { MarketOddsLine } from "@/components/market-odds";
 import { ProbBar } from "@/components/prob-bar";
 
 export const dynamic = "force-dynamic";
@@ -96,6 +97,7 @@ export default async function MatchPage({
             home={markets.h2h.home}
             away={markets.h2h.away}
           />
+          <MarketOddsLine odds={markets.market_odds} />
         </div>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
