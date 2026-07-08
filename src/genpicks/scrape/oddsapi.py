@@ -12,6 +12,7 @@ so requests are made here (never through Fetcher) and URLs are never logged.
 """
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -94,6 +95,8 @@ def poll(api_key: str, raw_root: Path) -> tuple[Path, int, int | None]:
 
     Returns (snapshot file, events in it, credits remaining this month).
     """
+    # httpx logs full request URLs at INFO — that would print the api key
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     response = httpx.get(
         odds_url(api_key),
         headers={"User-Agent": USER_AGENT, "Accept": "application/json"},

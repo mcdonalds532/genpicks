@@ -46,6 +46,7 @@ ODDSAPI_NAME_TO_RLP_SLUG = {
     "Canterbury-Bankstown Bulldogs": "canterbury-bankstown-bulldogs",
     "Cronulla Sharks": "cronulla-sutherland-sharks",
     "Cronulla-Sutherland Sharks": "cronulla-sutherland-sharks",
+    "Cronulla Sutherland Sharks": "cronulla-sutherland-sharks",  # live-observed
     "Dolphins": "dolphins",
     "Redcliffe Dolphins": "dolphins",
     "Gold Coast Titans": "gold-coast-titans",
