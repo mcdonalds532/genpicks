@@ -4,9 +4,10 @@ Machine-learning predictions for NRL matches: win probabilities, anytime
 try-scorer and first try-scorer probabilities per player, converted to implied
 betting odds and compared against live market prices.
 
-**Status: phases 1–5 complete** — full data pipeline (2016–2026, three
-sources), trained models, and a serving API. Next: frontend, live odds
-pollers.
+**Status: phases 1–7 complete** — full data pipeline (2016–2026, four
+sources), trained models, serving API, Next.js frontend, live market odds,
+and official team lists driving the player markets. Next: auth + payments,
+deployment.
 
 Headline numbers on the held-out 2024–26 test seasons:
 
@@ -29,8 +30,14 @@ Headline numbers on the held-out 2024–26 test seasons:
   canonical entity.
 - **Models** (XGBoost / Poisson): match winner, team try rates, player try
   share; calibrated probabilities benchmarked against bookmaker closing odds.
-- **Odds ingestion**: Betfair Exchange API (free delayed key, primary) and
-  TAB JSON API (secondary), snapshotted into `odds_snapshots`.
+- **Odds ingestion**: The Odds API (free tier, 11 Australian bookmakers),
+  polled into timestamped raw snapshots and replayed into `odds_snapshots`;
+  aussportsbetting.com closing odds for the historical benchmark. (TAB and
+  Betfair AU geo-block non-Australian IPs; polling them directly is a
+  deployment-time option from an AU host.)
+- **Team lists**: officially named lineups ingested from NRL.com each week;
+  try-scorer predictions regenerate append-only when a projected lineup is
+  superseded by the official one.
 - **Serving**: FastAPI reads precomputed rows from `predictions`; Next.js
   frontend on Vercel. Weekly refresh via GitHub Actions.
 
@@ -66,6 +73,13 @@ Neon/Supabase instance) and set `GENPICKS_DATABASE_URL` in `.env`.
 .venv\Scripts\python -m genpicks.ml.train
 .venv\Scripts\python -m genpicks.ml.train_tries
 
+# weekly in-season: official team lists + live market odds
+# (odds need GENPICKS_ODDS_API_KEY in .env — free key from the-odds-api.com)
+.venv\Scripts\python -m genpicks.scrape --source nrl-teamlists --seasons 2026
+.venv\Scripts\python -m genpicks.scrape --source oddsapi
+.venv\Scripts\python -m genpicks.ingest --source nrl-teamlists --seasons 2026
+.venv\Scripts\python -m genpicks.ingest --source oddsapi
+
 # score upcoming fixtures (append-only predictions table) and serve
 .venv\Scripts\python -m genpicks.ml.predict
 .venv\Scripts\uvicorn genpicks.api.main:app
@@ -82,7 +96,7 @@ cd web; npm install; npm run dev
 4. ~~Try-scorer models (team Poisson rates × player shares; first-try derived)~~
 5. ~~FastAPI serving layer with batch prediction jobs~~
 6. ~~Next.js frontend: fixtures, match detail, prediction track record~~
-7. Odds pollers (Betfair, TAB) and model-vs-market edge display; official team lists
+7. ~~Live odds (The Odds API) with model-vs-market display; official team lists~~
 8. Auth + Stripe subscription gating
 9. Deployment, docs, responsible-gambling disclaimer
 
