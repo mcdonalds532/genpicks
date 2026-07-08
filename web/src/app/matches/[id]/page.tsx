@@ -110,7 +110,13 @@ export default async function MatchPage({
           homeTeam={markets.home_team}
         />
       </div>
-      <p className="mt-4 text-xs text-muted">{markets.lineup_note}</p>
+      {markets.lineup_source !== null && (
+        <p className="mt-4 text-xs text-muted">
+          {markets.lineup_source === "official"
+            ? "Player markets use the officially named team lists."
+            : "Player markets use lineups projected from each team's most recent match; they update when official team lists are published."}
+        </p>
+      )}
     </div>
   );
 }

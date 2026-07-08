@@ -137,11 +137,15 @@ def match_markets(match_id: int, top: int = 10,
         raise HTTPException(404, "no predictions for this match")
 
     def player_market(market: str):
-        latest: dict[int, Prediction] = {}
-        for p in predictions:
-            if p.market == market and p.player_id is not None:
-                latest[p.player_id] = p
-        ranked = sorted(latest.values(), key=lambda p: -p.probability)[:top]
+        """Rows of the newest generation only: a projected-lineup generation
+        is superseded wholesale once official team lists arrive, and stale
+        players must not survive the changeover."""
+        rows = [p for p in predictions if p.market == market and p.player_id is not None]
+        if not rows:
+            return [], None
+        newest = max(p.generated_at for p in rows)
+        current = [p for p in rows if p.generated_at == newest]
+        ranked = sorted(current, key=lambda p: -p.probability)[:top]
         return [
             {
                 "player": players.get(p.player_id),
@@ -150,8 +154,10 @@ def match_markets(match_id: int, top: int = 10,
                 "implied_odds": implied_odds(p.probability),
             }
             for p in ranked
-        ]
+        ], current[0].lineup_source
 
+    anytime, anytime_source = player_market(MARKET_ANYTIME_TRY)
+    first, first_source = player_market(MARKET_FIRST_TRY)
     h2h = _latest_h2h(session, [match_id]).get(match_id, [])
     return {
         "match_id": match_id,
@@ -165,10 +171,11 @@ def match_markets(match_id: int, top: int = 10,
             }
             for p in h2h
         },
-        "anytime_try": player_market(MARKET_ANYTIME_TRY),
-        "first_try": player_market(MARKET_FIRST_TRY),
-        "lineup_note": "player markets use lineups projected from each team's "
-                       "most recent match until official team lists are ingested",
+        "anytime_try": anytime,
+        "first_try": first,
+        # "official": published team lists; "projected": each team's most
+        # recent played lineup (team lists not out yet)
+        "lineup_source": anytime_source or first_source,
     }
 
 

@@ -38,7 +38,7 @@ export type MatchMarkets = {
   h2h: { home?: WinProbability; away?: WinProbability };
   anytime_try: PlayerMarketEntry[];
   first_try: PlayerMarketEntry[];
-  lineup_note: string;
+  lineup_source: "official" | "projected" | null;
 };
 
 export type TrackRecord = Record<

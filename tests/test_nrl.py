@@ -20,9 +20,10 @@ from genpicks.db.models import (
     Player,
     PlayerAlias,
     PlayerMatchStats,
+    TeamListEntry,
     TryEvent,
 )
-from genpicks.ingest.nrl_loader import load_nrl_match
+from genpicks.ingest.nrl_loader import load_nrl_match, load_team_list
 from genpicks.ingest.rlp_loader import load_match_detail, load_season_rows
 from genpicks.scrape import nrl, rlp
 
@@ -89,6 +90,10 @@ def test_cache_path_from_match_centre_url():
     assert (
         nrl.match_cache_path("/draw/nrl-premiership/2016/round-1/eels-v-broncos/")
         == "nrl/matches/2016/round-1/eels-v-broncos.json"
+    )
+    assert (
+        nrl.teamlist_cache_path("/draw/nrl-premiership/2026/round-19/wests-tigers-v-warriors/")
+        == "nrl/teamlists/2026/round-19/wests-tigers-v-warriors.json"
     )
 
 
@@ -197,6 +202,47 @@ def test_incomplete_timeline_keeps_rlp_tries_and_skips_try_order(
     assert load_nrl_match(session, 2025, draw.fixtures[0], vegas_detail)
     session.commit()
     assert session.scalar(select(func.count()).select_from(TryEvent)) == 7
+
+
+def test_team_list_resolves_known_players_and_replaces_on_reingest(
+    session_with_rlp_data, draw, vegas_detail
+):
+    session, match = session_with_rlp_data
+    fixture = draw.fixtures[0]
+
+    # before any NRL played-match ingest, no (nrl, playerId) aliases exist:
+    # every entry lands unresolved, and no Player rows are invented
+    players_before = session.scalar(select(func.count()).select_from(Player))
+    assert load_team_list(session, 2025, fixture, vegas_detail)
+    session.commit()
+    entries = list(session.scalars(select(TeamListEntry)))
+    assert len(entries) == 36
+    assert all(e.player_id is None for e in entries)
+    assert all(e.player_name for e in entries)
+    assert session.scalar(select(func.count()).select_from(Player)) == players_before
+    # positions are stored in the canonical (RLP) vocabulary
+    positions = {e.position for e in entries}
+    assert "Wing" in positions and "Winger" not in positions
+    assert "Bench" in positions and "Interchange" not in positions
+
+    # once the played-match ingest has created the aliases, a re-ingest
+    # replaces the entries wholesale and resolves everyone who took the
+    # field (non-playing reserves never get aliases, so they stay null)
+    assert load_nrl_match(session, 2025, fixture, vegas_detail)
+    assert load_team_list(session, 2025, fixture, vegas_detail)
+    session.commit()
+    entries = list(session.scalars(select(TeamListEntry)))
+    assert len(entries) == 36  # replaced, not appended
+    played = {
+        s.player_id for s in vegas_detail.player_stats
+        if s.stats.get("minutesPlayed")
+    }
+    assert sum(e.player_id is not None for e in entries) == len(played)
+    assert {e.match_id for e in entries} == {match.id}
+    kris = session.scalar(
+        select(PlayerAlias).where(PlayerAlias.source == "nrl", PlayerAlias.alias == "504148")
+    )
+    assert any(e.player_id == kris.player_id and e.jersey_number for e in entries)
 
 
 def test_nrl_ingest_is_idempotent(session_with_rlp_data, draw, vegas_detail):

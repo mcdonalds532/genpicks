@@ -201,6 +201,32 @@ class TryEvent(Base):
     minute: Mapped[int | None]
 
 
+class TeamListEntry(Base):
+    """One named player on an official pre-match team list.
+
+    A match's entries are replaced wholesale each ingest, so the table always
+    holds the newest published list (late changes overwrite); historical
+    snapshots live in data/raw/. player_name is the string as published;
+    player_id stays null when the name cannot be resolved through the alias
+    tables (e.g. a debutant with no appearance history) — such players are
+    skipped by the prediction lineup, never invented as new Player rows,
+    because the played-match ingest owns player creation.
+    """
+
+    __tablename__ = "team_list_entries"
+    __table_args__ = (Index("ix_team_list_entries_match", "match_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    match_id: Mapped[int] = mapped_column(ForeignKey("matches.id"))
+    team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"))
+    player_id: Mapped[int | None] = mapped_column(ForeignKey("players.id"))
+    player_name: Mapped[str] = mapped_column(String(150))
+    position: Mapped[str | None] = mapped_column(String(30))  # canonical vocabulary
+    jersey_number: Mapped[int | None]
+    source: Mapped[str] = mapped_column(String(50))
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 # --------------------------------------------------------------------------
 # Odds and predictions
 # --------------------------------------------------------------------------
@@ -253,3 +279,8 @@ class Prediction(Base):
     player_id: Mapped[int | None] = mapped_column(ForeignKey("players.id"))
     probability: Mapped[float] = mapped_column(Float)
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # which lineup the try markets were computed from: "projected" (last
+    # played match) or "official" (ingested team list); null for h2h.
+    # A projected generation is superseded — by appending, never updating —
+    # once the official list arrives; readers take the newest generation.
+    lineup_source: Mapped[str | None] = mapped_column(String(20))

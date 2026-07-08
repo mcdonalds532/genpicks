@@ -26,7 +26,10 @@ def client():
     with Session(engine) as session:
         session.add_all([Team(id=1, name="Alpha"), Team(id=2, name="Beta")])
         session.add(Venue(id=1, name="Big Stadium"))
-        session.add(Player(id=1, full_name="Flash Winger"))
+        session.add_all([
+            Player(id=1, full_name="Flash Winger"),
+            Player(id=2, full_name="Late Callup"),
+        ])
         session.add_all(
             [
                 # settled match with a correct home prediction
@@ -50,10 +53,25 @@ def client():
                            team_id=2, probability=0.55, generated_at=now),
                 Prediction(model_version="v_test", match_id=2, market="h2h",
                            team_id=1, probability=0.45, generated_at=now),
+                # projected-lineup generation, superseded by the official one
+                # below: only the newest generation may be served
                 Prediction(model_version="v_test", match_id=2, market="anytime_try",
-                           team_id=1, player_id=1, probability=0.42, generated_at=now),
+                           team_id=1, player_id=1, probability=0.42,
+                           generated_at=now - timedelta(hours=2),
+                           lineup_source="projected"),
                 Prediction(model_version="v_test", match_id=2, market="first_try",
-                           team_id=1, player_id=1, probability=0.08, generated_at=now),
+                           team_id=1, player_id=1, probability=0.08,
+                           generated_at=now - timedelta(hours=2),
+                           lineup_source="projected"),
+                Prediction(model_version="v_test", match_id=2, market="anytime_try",
+                           team_id=1, player_id=1, probability=0.5,
+                           generated_at=now, lineup_source="official"),
+                Prediction(model_version="v_test", match_id=2, market="anytime_try",
+                           team_id=1, player_id=2, probability=0.3,
+                           generated_at=now, lineup_source="official"),
+                Prediction(model_version="v_test", match_id=2, market="first_try",
+                           team_id=1, player_id=1, probability=0.1,
+                           generated_at=now, lineup_source="official"),
             ]
         )
         session.commit()
@@ -85,16 +103,19 @@ def test_upcoming_lists_fixture_with_probabilities(client):
     assert probs["model_version"] == "v_test"
 
 
-def test_match_markets(client):
+def test_match_markets_serve_newest_generation_only(client):
     body = client.get("/matches/2/markets").json()
     assert body["h2h"]["home"]["probability"] == 0.55
     assert body["anytime_try"][0] == {
         "player": "Flash Winger",
         "team": "Alpha",
-        "probability": 0.42,
-        "implied_odds": round(1 / 0.42, 2),
+        "probability": 0.5,
+        "implied_odds": round(1 / 0.5, 2),
     }
-    assert body["first_try"][0]["probability"] == 0.08
+    # the superseded projected generation (0.42 / 0.08) is not served
+    assert [e["probability"] for e in body["anytime_try"]] == [0.5, 0.3]
+    assert [e["probability"] for e in body["first_try"]] == [0.1]
+    assert body["lineup_source"] == "official"
     assert client.get("/matches/999/markets").status_code == 404
 
 

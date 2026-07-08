@@ -9,10 +9,13 @@ data/models/, scores every unplayed fixture, and appends rows to the
 predictions table (append-only by design: a (model_version, match, market)
 combination is written at most once, so re-runs only add what's missing).
 
-Lineups for the try markets are PROJECTED from each team's most recent
-played match until real team lists are ingested (phase 7); first-try
-probabilities are conditional on a try being scored and normalised per
-match.
+Lineups for the try markets come from ingested official team lists when a
+match has them for both sides (lineup_source="official"); otherwise they are
+projected from each team's most recent played match ("projected"). A
+projected generation is superseded by appending an official one once team
+lists arrive — rows are never updated — and readers take the newest
+generation per market. First-try probabilities are conditional on a try
+being scored and normalised per match.
 """
 
 import argparse
@@ -33,6 +36,7 @@ from genpicks.db.models import (
     MARKET_H2H,
     Match,
     Prediction,
+    TeamListEntry,
 )
 from genpicks.ml.features import FEATURE_COLUMNS, build_match_dataset
 from genpicks.ml.tries import (
@@ -100,6 +104,46 @@ def predict_h2h(session, engine, models_root: Path, upcoming_ids: set[int]) -> i
     return written
 
 
+def official_lineups(
+    session: Session, match_ids: set[int]
+) -> dict[tuple[int, int], list[tuple[int, str | None]]]:
+    """Usable official lineups keyed by (match_id, team_id).
+
+    Jerseys 1-17 are the matchday side; higher numbers and unnumbered names
+    are cover players. A lineup is usable when at least 13 of its players
+    resolved to canonical ids (unresolved debutants are simply absent — their
+    try share is diffuse anyway with no appearance history).
+    """
+    lineups: dict[tuple[int, int], list[tuple[int, str | None]]] = {}
+    for entry in session.scalars(
+        select(TeamListEntry).where(
+            TeamListEntry.match_id.in_(match_ids),
+            TeamListEntry.player_id.is_not(None),
+        )
+    ):
+        if entry.jersey_number is None or entry.jersey_number > 17:
+            continue
+        lineups.setdefault((entry.match_id, entry.team_id), []).append(
+            (entry.player_id, entry.position)
+        )
+    return {key: lineup for key, lineup in lineups.items() if len(lineup) >= 13}
+
+
+def newest_try_generation(session: Session, model_version: str) -> dict[int, str | None]:
+    """match_id -> lineup_source of the newest try-market generation."""
+    newest: dict[int, str | None] = {}
+    for match_id, lineup_source in session.execute(
+        select(Prediction.match_id, Prediction.lineup_source)
+        .where(
+            Prediction.model_version == model_version,
+            Prediction.market == MARKET_ANYTIME_TRY,
+        )
+        .order_by(Prediction.generated_at)
+    ):
+        newest[match_id] = lineup_source
+    return newest
+
+
 def predict_tries(session, engine, models_root: Path, upcoming_ids: set[int]) -> int:
     model_dir = latest_model_dir(models_root, "try_scorer_")
     report = json.loads((model_dir / "report.json").read_text(encoding="utf-8"))
@@ -128,22 +172,35 @@ def predict_tries(session, engine, models_root: Path, upcoming_ids: set[int]) ->
         last_match[match.home_team_id] = match.match_id
         last_match[match.away_team_id] = match.match_id
 
-    done = existing_keys(session, version)
+    newest = newest_try_generation(session, version)
+    official = official_lineups(session, upcoming_ids)
     now = datetime.now(timezone.utc)
     lam_sum = team_rows.groupby("match_id")["lam"].sum().to_dict()
-    written = 0
+    written = {"official": 0, "projected": 0}
     for match_id, group in team_rows.groupby("match_id"):
-        if (match_id, MARKET_ANYTIME_TRY) in done:
+        team_ids = [team.team_id for team in group.itertuples()]
+        basis = (
+            "official"
+            if all((match_id, team_id) in official for team_id in team_ids)
+            else "projected"
+        )
+        # a projected generation is superseded once official lists arrive;
+        # an official one is final, and re-runs never duplicate a basis
+        prev = newest.get(match_id, "none")
+        if prev in (basis, "official"):
             continue
         entries = []  # (team_id, player_id, share, lam)
         for team in group.itertuples():
-            source_match = last_match.get(team.team_id)
-            if source_match is None:
-                continue
-            lineup_rows = apps[
-                (apps["match_id"] == source_match) & (apps["team_id"] == team.team_id)
-            ]
-            lineup = list(zip(lineup_rows["player_id"], lineup_rows["position"]))
+            lineup = official.get((match_id, team.team_id))
+            if lineup is None:
+                source_match = last_match.get(team.team_id)
+                if source_match is None:
+                    continue
+                lineup_rows = apps[
+                    (apps["match_id"] == source_match)
+                    & (apps["team_id"] == team.team_id)
+                ]
+                lineup = list(zip(lineup_rows["player_id"], lineup_rows["position"]))
             shares = current_shares(data, priors, fallback, lineup)
             total = sum(shares.values()) or 1.0
             for player_id, share_raw in shares.items():
@@ -156,6 +213,7 @@ def predict_tries(session, engine, models_root: Path, upcoming_ids: set[int]) ->
                     model_version=version, match_id=match_id,
                     market=MARKET_ANYTIME_TRY, team_id=team_id,
                     player_id=player_id, probability=p_any, generated_at=now,
+                    lineup_source=basis,
                 )
             )
             session.add(
@@ -163,11 +221,15 @@ def predict_tries(session, engine, models_root: Path, upcoming_ids: set[int]) ->
                     model_version=version, match_id=match_id,
                     market=MARKET_FIRST_TRY, team_id=team_id,
                     player_id=player_id, probability=p_first, generated_at=now,
+                    lineup_source=basis,
                 )
             )
-        written += 1
-    logger.info("try markets (%s): %d matches written", version, written)
-    return written
+        written[basis] += 1
+    logger.info(
+        "try markets (%s): %d matches written from official lists, %d projected",
+        version, written["official"], written["projected"],
+    )
+    return sum(written.values())
 
 
 def main(argv: list[str] | None = None) -> None:

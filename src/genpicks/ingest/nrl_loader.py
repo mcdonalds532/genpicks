@@ -20,7 +20,7 @@ Reconciliation:
 """
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -33,6 +33,7 @@ from genpicks.db.models import (
     PlayerMatchStats,
     Team,
     TeamAlias,
+    TeamListEntry,
     TryEvent,
 )
 from genpicks.scrape.nrl import SOURCE, NrlFixture, NrlMatchDetail
@@ -61,6 +62,25 @@ NICKNAME_TO_RLP_SLUG = {
     "Warriors": "warriors",
     "Wests Tigers": "wests-tigers",
 }
+
+# NRL.com position label -> the canonical vocabulary RLP established in
+# player_match_stats (which the try-share position priors were computed on).
+# Labels not listed pass through unchanged (Fullback, Centre, Halfback,
+# Hooker, Lock, Reserve).
+NRL_POSITION_TO_CANONICAL = {
+    "Winger": "Wing",
+    "Prop": "Front row",
+    "2nd Row": "Second row",
+    "Five-Eighth": "Five-eighth",
+    "Interchange": "Bench",
+}
+
+
+def canonical_position(nrl_position: str | None) -> str | None:
+    if nrl_position is None:
+        return None
+    return NRL_POSITION_TO_CANONICAL.get(nrl_position, nrl_position)
+
 
 # NRL.com stat name -> player_match_stats column. Tries are deliberately
 # absent: they are handled through the timeline-vs-RLP reconciliation below,
@@ -367,7 +387,7 @@ def _load_player_stats(
         squad_player = squad_by_id.get(stat_row.player_id)
         if squad_player is not None:
             if row.position is None:
-                row.position = squad_player.position
+                row.position = canonical_position(squad_player.position)
             if row.jersey_number is None:
                 row.jersey_number = squad_player.number
 
@@ -381,6 +401,77 @@ def _load_player_stats(
             row.tries = timeline_tries.get(stat_row.player_id, 0)
         elif row.tries is None:
             row.tries = stat_row.stats.get("tries")
+
+
+# -- team lists (pre-match) ---------------------------------------------------
+
+
+def load_team_list(
+    session: Session, season: int, fixture: NrlFixture, detail: NrlMatchDetail
+) -> bool:
+    """Replace a match's team_list_entries with the published squads.
+
+    Players resolve through their (nrl, playerId) alias only — anyone without
+    one (a debutant) keeps player_id null rather than getting a Player row
+    invented here, because played-match ingest owns player creation and would
+    otherwise produce a duplicate once RLP ingests the match.
+    Returns False if the match cannot be reconciled or no squads are listed.
+    """
+    if not detail.squads:
+        return False
+    home_team = _resolve_team(session, fixture.home_team_id, fixture.home_nickname)
+    away_team = _resolve_team(session, fixture.away_team_id, fixture.away_nickname)
+    if home_team is None or away_team is None:
+        return False
+    match = _resolve_match(session, season, detail, fixture, home_team, away_team)
+    if match is None:
+        return False
+
+    # upcoming fixtures have no played-match ingest to fill their kickoff
+    if detail.start_time_utc is not None:
+        match.kickoff_utc = detail.start_time_utc
+
+    aliases = {
+        alias.alias: alias.player_id
+        for alias in session.scalars(
+            select(PlayerAlias).where(
+                PlayerAlias.source == SOURCE,
+                PlayerAlias.alias.in_(
+                    [str(p.player_id) for p in detail.squads]
+                ),
+            )
+        )
+    }
+    side_team = {"home": home_team, "away": away_team}
+    captured_at = datetime.now(timezone.utc)
+
+    session.execute(delete(TeamListEntry).where(TeamListEntry.match_id == match.id))
+    unresolved = 0
+    for squad_player in detail.squads:
+        player_id = aliases.get(str(squad_player.player_id))
+        if player_id is None:
+            unresolved += 1
+        session.add(
+            TeamListEntry(
+                match_id=match.id,
+                team_id=side_team[squad_player.side].id,
+                player_id=player_id,
+                player_name=(
+                    f"{squad_player.first_name} {squad_player.last_name}".strip()
+                ),
+                position=canonical_position(squad_player.position),
+                jersey_number=squad_player.number,
+                source=SOURCE,
+                captured_at=captured_at,
+            )
+        )
+    if unresolved:
+        logger.info(
+            "match %s team list: %d/%d players have no appearance history yet",
+            match.source_key, unresolved, len(detail.squads),
+        )
+    session.flush()
+    return True
 
 
 def _load_try_events(

@@ -4,6 +4,7 @@ Usage:
     python -m genpicks.ingest --seasons 2016-2026                # RLP (default)
     python -m genpicks.ingest --source nrl --seasons 2016-2026   # NRL.com
     python -m genpicks.ingest --source asb --seasons 2016-2026   # closing odds
+    python -m genpicks.ingest --source nrl-teamlists --seasons 2026  # team lists
 
 Reads only from data/raw/ (never the network). Match pages the backfill has
 not downloaded yet are skipped and picked up on the next run — ingest and
@@ -22,7 +23,7 @@ from genpicks.config import get_settings
 from genpicks.scrape import asb, nrl, rlp
 from genpicks.scrape.backfill import parse_seasons
 from genpicks.ingest.asb_loader import load_asb_odds
-from genpicks.ingest.nrl_loader import load_nrl_match
+from genpicks.ingest.nrl_loader import load_nrl_match, load_team_list
 from genpicks.ingest.rlp_loader import load_match_detail, load_season_rows
 
 logger = logging.getLogger(__name__)
@@ -77,9 +78,38 @@ def ingest_nrl_season(
     return attached, skipped, missing
 
 
+def ingest_nrl_teamlists(
+    session: Session, raw_root: Path, season: int
+) -> tuple[int, int]:
+    """Returns (team lists loaded, skipped/unreconciled)."""
+    draw_dir = raw_root / f"nrl/draws/{season}"
+    if not draw_dir.exists():
+        logger.warning("season %d: no NRL draw files in raw store, skipping", season)
+        return 0, 0
+
+    loaded = skipped = 0
+    for draw_file in sorted(draw_dir.glob("round-*.json")):
+        page = nrl.parse_draw(draw_file.read_text(encoding="utf-8"))
+        for fixture in page.fixtures:
+            if fixture.is_played:
+                continue
+            teamlist_file = raw_root / nrl.teamlist_cache_path(
+                fixture.match_centre_path
+            )
+            if not teamlist_file.exists():
+                continue
+            detail = nrl.parse_match(teamlist_file.read_text(encoding="utf-8"))
+            if load_team_list(session, season, fixture, detail):
+                loaded += 1
+            else:
+                skipped += 1
+    return loaded, skipped
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", choices=("rlp", "nrl", "asb"), default="rlp")
+    parser.add_argument("--source", choices=("rlp", "nrl", "nrl-teamlists", "asb"),
+                        default="rlp")
     parser.add_argument("--seasons", required=True, help='e.g. "2016-2026"')
     parser.add_argument("--raw-root", type=Path, default=Path("data/raw"))
     parser.add_argument("--database-url", default=None,
@@ -106,7 +136,12 @@ def main(argv: list[str] | None = None) -> None:
                         loaded, unmatched)
             return
         for season in parse_seasons(args.seasons):
-            if args.source == "nrl":
+            if args.source == "nrl-teamlists":
+                loaded, skipped = ingest_nrl_teamlists(session, args.raw_root, season)
+                session.commit()
+                logger.info("season %d: %d team lists loaded, %d skipped",
+                            season, loaded, skipped)
+            elif args.source == "nrl":
                 attached, skipped, missing = ingest_nrl_season(
                     session, args.raw_root, season
                 )

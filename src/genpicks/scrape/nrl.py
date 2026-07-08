@@ -55,6 +55,15 @@ def match_cache_path(match_centre_path: str) -> str:
     return f"nrl/matches/{m.group(1)}/{m.group(2)}/{m.group(3)}.json"
 
 
+def teamlist_cache_path(match_centre_path: str) -> str:
+    """Pre-match snapshot of the same endpoint as match_cache_path, stored
+    apart from it: the pre-game payload (squads, no stats/timeline) must never
+    sit where the played-match ingest expects full-time data."""
+    return match_cache_path(match_centre_path).replace(
+        "nrl/matches/", "nrl/teamlists/", 1
+    )
+
+
 # --------------------------------------------------------------------------
 # Draw (fixtures for one round)
 # --------------------------------------------------------------------------

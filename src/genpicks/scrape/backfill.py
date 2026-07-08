@@ -3,6 +3,7 @@
 Usage:
     python -m genpicks.scrape --seasons 2016-2025                # RLP (default)
     python -m genpicks.scrape --source nrl --seasons 2016-2025   # NRL.com JSON
+    python -m genpicks.scrape --source nrl-teamlists --seasons 2026  # team lists
     python -m genpicks.scrape --seasons 2025 --limit 5           # smoke test
     python -m genpicks.scrape --seasons 2025 --skip-matches
 
@@ -13,6 +14,7 @@ pages per source) takes a bit over an hour of network time on the first run.
 
 import argparse
 import logging
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from genpicks.scrape import nrl, rlp
@@ -102,9 +104,64 @@ def backfill_nrl_season(
     return len(played), fetched
 
 
+def backfill_nrl_teamlists(
+    fetcher: Fetcher, season: int, *, horizon_days: int = 8
+) -> tuple[int, int]:
+    """Fetch team lists (pre-match match-centre data) for upcoming fixtures.
+
+    Uses the season's cached draw files to find rounds that still have
+    unplayed fixtures, force-refetches those draws (kickoffs and match modes
+    go stale), and snapshots every Pre fixture kicking off within
+    horizon_days. Always force-fetches: team lists change during the week.
+    Returns (upcoming fixtures in horizon, team list files fetched).
+    """
+    draw_dir = fetcher.raw_root / f"nrl/draws/{season}"
+    if not draw_dir.exists():
+        logger.warning(
+            "season %d: no cached draw files — run the nrl backfill first", season
+        )
+        return 0, 0
+
+    pending_rounds = []
+    for draw_file in sorted(draw_dir.glob("round-*.json")):
+        page = nrl.parse_draw(draw_file.read_text(encoding="utf-8"))
+        if any(not f.is_played for f in page.fixtures):
+            pending_rounds.append(int(draw_file.stem.split("-")[1]))
+
+    horizon = datetime.now(timezone.utc) + timedelta(days=horizon_days)
+    upcoming = fetched = 0
+    for round_number in pending_rounds:
+        page = nrl.parse_draw(
+            fetcher.get(
+                nrl.draw_url(season, round_number),
+                nrl.draw_cache_path(season, round_number),
+                force=True,
+            )
+        )
+        in_horizon = [
+            f
+            for f in page.fixtures
+            if f.match_mode == "Pre"
+            and f.kickoff_utc is not None
+            and f.kickoff_utc <= horizon
+        ]
+        upcoming += len(in_horizon)
+        if not in_horizon:
+            break  # rounds are chronological; nothing further is in horizon
+        for fixture in in_horizon:
+            fetcher.get(
+                nrl.match_data_url(fixture.match_centre_path),
+                nrl.teamlist_cache_path(fixture.match_centre_path),
+                force=True,
+            )
+            fetched += 1
+    return upcoming, fetched
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", choices=("rlp", "nrl"), default="rlp")
+    parser.add_argument("--source", choices=("rlp", "nrl", "nrl-teamlists"),
+                        default="rlp")
     parser.add_argument("--seasons", required=True, help='e.g. "2016-2025" or "2025"')
     parser.add_argument("--raw-root", type=Path, default=Path("data/raw"))
     parser.add_argument("--skip-matches", action="store_true",
@@ -116,6 +173,13 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    if args.source == "nrl-teamlists":
+        fetcher = Fetcher(args.raw_root, headers=nrl.JSON_HEADERS)
+        for season in parse_seasons(args.seasons):
+            upcoming, fetched = backfill_nrl_teamlists(fetcher, season)
+            logger.info("season %d: team lists for %d/%d upcoming fixtures",
+                        season, fetched, upcoming)
+        return
     if args.source == "nrl":
         fetcher = Fetcher(args.raw_root, headers=nrl.JSON_HEADERS)
         backfill = backfill_nrl_season
