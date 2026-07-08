@@ -15,8 +15,9 @@ Reconciliation:
   differ from local date, e.g. Las Vegas).
 - players: NRL playerId alias if seen before, else matched inside the
   reconciled match against RLP appearances by full name, falling back to
-  jersey number; else a new Player row. Requires the RLP detail for the
-  match to be ingested first to avoid duplicate players.
+  jersey number; else a same-name player unclaimed by any nrl row (a debut
+  RLP only credits in a later match); else a new Player row. Requires the
+  RLP detail for the match to be ingested first to avoid duplicate players.
 """
 
 import logging
@@ -36,6 +37,7 @@ from genpicks.db.models import (
     TeamListEntry,
     TryEvent,
 )
+from genpicks.ingest.resolve import adopt_orphan_player
 from genpicks.scrape.nrl import SOURCE, NrlFixture, NrlMatchDetail
 
 logger = logging.getLogger(__name__)
@@ -315,6 +317,10 @@ def _resolve_players(
             # people with no game time.
             if not minutes.get(squad_player.player_id):
                 continue
+            # a debut RLP credits only in a later match may already exist as
+            # an RLP-created player with no nrl alias — claim it, don't dup
+            player = adopt_orphan_player(session, SOURCE, full_name)
+        if player is None:
             player = Player(full_name=full_name)
             session.add(player)
             session.flush()

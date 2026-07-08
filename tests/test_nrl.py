@@ -1,4 +1,4 @@
-"""NRL.com parser and loader tests against real saved JSON.
+﻿"""NRL.com parser and loader tests against real saved JSON.
 
 The 2025 fixtures are the same real match as the RLP fixtures (the Vegas
 opener, Raiders v Warriors), so the ingest test exercises genuine
@@ -243,6 +243,43 @@ def test_team_list_resolves_known_players_and_replaces_on_reingest(
         select(PlayerAlias).where(PlayerAlias.source == "nrl", PlayerAlias.alias == "504148")
     )
     assert any(e.player_id == kris.player_id and e.jersey_number for e in entries)
+
+
+def test_debut_without_rlp_appearance_adopts_existing_same_name_player(
+    session_with_rlp_data, draw, vegas_detail
+):
+    # NRL shows real minutes for a player RLP's scoresheet skipped (reserve
+    # who came on). If a same-name player already exists with no nrl alias
+    # (RLP credited them in another match), claim it instead of duplicating.
+    import dataclasses
+
+    from genpicks.scrape.nrl import NrlPlayerStats, NrlSquadPlayer
+
+    session, match = session_with_rlp_data
+    existing = Player(full_name="Totally Newman")
+    session.add(existing)
+    session.commit()
+
+    detail = dataclasses.replace(
+        vegas_detail,
+        squads=vegas_detail.squads + [NrlSquadPlayer(
+            side="home", player_id=999001, first_name="Totally",
+            last_name="Newman", position="Interchange", number=None,
+        )],
+        player_stats=vegas_detail.player_stats + [NrlPlayerStats(
+            side="home", player_id=999001,
+            stats={"playerId": 999001, "minutesPlayed": 11},
+        )],
+    )
+    players_before = session.scalar(select(func.count()).select_from(Player))
+    assert load_nrl_match(session, 2025, draw.fixtures[0], detail)
+    session.commit()
+
+    assert session.scalar(select(func.count()).select_from(Player)) == players_before
+    alias = session.scalar(
+        select(PlayerAlias).where(PlayerAlias.source == "nrl", PlayerAlias.alias == "999001")
+    )
+    assert alias.player_id == existing.id
 
 
 def test_nrl_ingest_is_idempotent(session_with_rlp_data, draw, vegas_detail):
