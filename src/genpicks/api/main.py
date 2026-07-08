@@ -36,7 +36,11 @@ LIVE_ODDS_SOURCE = "oddsapi"
 app = FastAPI(title="GenPicks", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=[
+        origin.strip()
+        for origin in get_settings().cors_origins.split(",")
+        if origin.strip()
+    ],
     allow_methods=["GET"],
     allow_headers=["*"],
 )

@@ -68,11 +68,37 @@ class Resolver:
     def player(self, source_id: str, display_name: str) -> Player:
         player = self._resolve(Player, PlayerAlias, "player_id", source_id)
         if player is None:
+            player = self._adopt_orphan(prettify_player_name(display_name))
+        if player is None:
             player = Player(full_name=prettify_player_name(display_name))
             self.session.add(player)
             self.session.flush()
-            self._record_alias(Player, PlayerAlias, "player_id", player.id, source_id)
+        self._ensure_alias(Player, PlayerAlias, "player_id", player.id, source_id)
         return player
+
+    def _adopt_orphan(self, full_name: str) -> Player | None:
+        """A same-name player no row from this source has claimed yet.
+
+        Another source can legitimately create a player first — e.g. a debut
+        where NRL.com shows real minutes but RLP's scoresheet lists only a
+        reserve slot, so RLP first credits the player rounds later under a
+        fresh id (observed: Xavier Savage, 2021). Minting a second Player
+        then double-counts a human forever. Names alone are never trusted as
+        aliases, but for the narrow orphan case (no alias from this source)
+        adoption is safe; ambiguity (two orphans sharing the name) declines.
+        """
+        orphans = self.session.scalars(
+            select(Player).where(
+                Player.full_name == full_name,
+                ~select(PlayerAlias.id)
+                .where(
+                    PlayerAlias.player_id == Player.id,
+                    PlayerAlias.source == self.source,
+                )
+                .exists(),
+            )
+        ).all()
+        return orphans[0] if len(orphans) == 1 else None
 
     # -- internals ---------------------------------------------------------
 

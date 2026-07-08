@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///data/genpicks.db"
     # the-odds-api.com key (free Starter tier); scrape --source oddsapi
     odds_api_key: str | None = None
+    # comma-separated origins allowed to call the API from a browser;
+    # the deployed frontend's domain goes here
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
 
 @lru_cache

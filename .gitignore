@@ -10,12 +10,12 @@ __pycache__/
 # Environment / secrets
 .env
 
-# Local data (raw scrapes, dev database and model artifacts are rebuildable,
-# never committed)
+# Local data (raw scrapes and the dev database are rebuildable, never
+# committed). Model artifacts ARE committed: they are <1 MB per version and
+# the weekly GitHub Actions prediction job loads them straight from the repo.
 data/raw/*
 !data/raw/.gitkeep
 data/*.db
-data/models/
 
 # Node (frontend, later phases)
 node_modules/

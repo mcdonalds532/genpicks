@@ -1,0 +1,67 @@
+# In-season refresh: settle last round's results, pull this round's official
+# team lists and live market odds, and score upcoming fixtures.
+#
+# Schedule (UTC): Monday 22:00 catches the finished round (Mon morning AEST
+# games are done) and Wednesday 22:00 catches team lists (published Tuesday
+# AEST) plus fresh odds. Each run is idempotent — loaders skip or supersede
+# rather than duplicate — so extra manual runs are always safe.
+#
+# Secrets required:
+#   GENPICKS_DATABASE_URL   hosted Postgres, e.g. Neon
+#   GENPICKS_ODDS_API_KEY   the-odds-api.com key (1 credit per run)
+name: weekly-refresh
+
+on:
+  schedule:
+    - cron: "0 22 * * 1" # Mon 22:00 UTC — results settling
+    - cron: "0 22 * * 3" # Wed 22:00 UTC — team lists + odds
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GENPICKS_DATABASE_URL: ${{ secrets.GENPICKS_DATABASE_URL }}
+      GENPICKS_ODDS_API_KEY: ${{ secrets.GENPICKS_ODDS_API_KEY }}
+      SEASON: "2026"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install
+        run: pip install .
+
+      # data/raw is cache-first: restoring last run's cache means only the
+      # current round's pages are refetched (--force refetches season/draw
+      # indexes and this season's match pages, ~2s apart per page)
+      - name: Restore raw page cache
+        uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: raw-${{ github.run_id }}
+          restore-keys: raw-
+
+      - name: Scrape current season results
+        run: |
+          python -m genpicks.scrape --source rlp --seasons $SEASON --force
+          python -m genpicks.scrape --source nrl --seasons $SEASON --force
+
+      - name: Scrape team lists and odds
+        run: |
+          python -m genpicks.scrape --source nrl-teamlists --seasons $SEASON
+          python -m genpicks.scrape --source oddsapi
+
+      - name: Ingest (order matters: rlp creates, nrl attaches)
+        run: |
+          python -m genpicks.ingest --source rlp --seasons $SEASON
+          python -m genpicks.ingest --source nrl --seasons $SEASON
+          python -m genpicks.ingest --source nrl-teamlists --seasons $SEASON
+          python -m genpicks.ingest --source oddsapi
+
+      - name: Score upcoming fixtures
+        run: python -m genpicks.ml.predict

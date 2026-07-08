@@ -1,0 +1,125 @@
+{
+  "model_version": "match_winner_v0.1_20260706",
+  "splits": {
+    "train": [
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021
+    ],
+    "val": [
+      2022,
+      2023
+    ],
+    "test": [
+      2024,
+      2025,
+      2026
+    ]
+  },
+  "best_iteration": 232,
+  "test_all": {
+    "model_raw": {
+      "log_loss": 0.6523259878158569,
+      "brier": 0.22948266565799713,
+      "accuracy": 0.6481149012567325,
+      "n": 557
+    },
+    "model_calibrated": {
+      "log_loss": 0.6497585773468018,
+      "brier": 0.22854000329971313,
+      "accuracy": 0.6355475763016158,
+      "n": 557
+    },
+    "elo_only": {
+      "log_loss": 0.6532730212736596,
+      "brier": 0.23044420877501923,
+      "accuracy": 0.6247755834829444,
+      "n": 557
+    },
+    "always_home_0.58": {
+      "log_loss": 0.6820684416671886,
+      "brier": 0.24447829725553796,
+      "accuracy": 0.5763016157989228,
+      "n": 557
+    }
+  },
+  "test_with_market_odds": {
+    "n": 557,
+    "model_calibrated": {
+      "log_loss": 0.6497585773468018,
+      "brier": 0.22854000329971313,
+      "accuracy": 0.6355475763016158,
+      "n": 557
+    },
+    "market_closing": {
+      "log_loss": 0.6453946725539256,
+      "brier": 0.22615749287377732,
+      "accuracy": 0.6283662477558348,
+      "n": 557
+    }
+  },
+  "calibration_test": [
+    {
+      "bin": "0.2-0.3",
+      "n": 56,
+      "predicted": 0.24978409707546234,
+      "actual": 0.35714285714285715
+    },
+    {
+      "bin": "0.3-0.4",
+      "n": 44,
+      "predicted": 0.3512362837791443,
+      "actual": 0.4090909090909091
+    },
+    {
+      "bin": "0.4-0.5",
+      "n": 59,
+      "predicted": 0.4599319398403168,
+      "actual": 0.423728813559322
+    },
+    {
+      "bin": "0.5-0.6",
+      "n": 113,
+      "predicted": 0.5571509003639221,
+      "actual": 0.5663716814159292
+    },
+    {
+      "bin": "0.6-0.7",
+      "n": 130,
+      "predicted": 0.6488856673240662,
+      "actual": 0.6307692307692307
+    },
+    {
+      "bin": "0.7-0.8",
+      "n": 116,
+      "predicted": 0.7478172779083252,
+      "actual": 0.6896551724137931
+    },
+    {
+      "bin": "0.8-0.9",
+      "n": 39,
+      "predicted": 0.8168843984603882,
+      "actual": 0.8205128205128205
+    }
+  ],
+  "feature_importance_gain": {
+    "elo_expected_home": 12.77,
+    "elo_diff": 11.44,
+    "season_win_rate_diff": 8.42,
+    "margin_10_diff": 6.1,
+    "points_against_5_diff": 4.81,
+    "margin_5_diff": 4.48,
+    "rest_days_diff": 3.63,
+    "win_rate_5_diff": 3.58,
+    "win_rate_10_diff": 3.41,
+    "points_for_5_diff": 2.99,
+    "round_number": 2.96
+  },
+  "calibrator_platt": {
+    "coef": 0.9449957013130188,
+    "intercept": 0.10854890197515488
+  }
+}

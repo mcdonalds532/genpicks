@@ -89,6 +89,29 @@ def test_venue_sponsor_rename_resolves_to_same_venue(session):
     assert aliases == {"8", "Pirtek Stadium", "CommBank Stadium"}
 
 
+def test_new_source_id_adopts_orphan_player_created_by_another_source(session):
+    # A debut can reach the DB through NRL.com first (real minutes, but RLP
+    # lists only a reserve slot); when RLP later credits the player under a
+    # fresh id, that id must claim the existing human, not mint a second one
+    # (observed live: Xavier Savage, 2021).
+    orphan = Player(full_name="Xavier Savage")
+    session.add(orphan)
+    session.flush()
+    session.add(PlayerAlias(player_id=orphan.id, alias="510220", source="nrl"))
+    session.commit()
+
+    resolver = Resolver(session, "rlp")
+    adopted = resolver.player("31266", "Xavier SAVAGE")
+    assert adopted.id == orphan.id
+    assert session.scalar(select(func.count()).select_from(Player)) == 1
+
+    # same-name players already claimed by this source are never adopted:
+    # a second unseen rlp id with the same name is a different human
+    second = resolver.player("99999", "Xavier SAVAGE")
+    assert second.id != orphan.id
+    assert session.scalar(select(func.count()).select_from(Player)) == 2
+
+
 def test_same_display_name_different_ids_stay_separate_venues(session):
     # Old and new Sydney Football Stadium: different RLP ids, both "Allianz".
     resolver = Resolver(session, "rlp")
