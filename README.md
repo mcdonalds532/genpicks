@@ -120,7 +120,7 @@ slow while the API wakes.
 7. ~~Live odds (The Odds API) with model-vs-market display; official team lists~~
 8. Auth + Stripe subscription gating
 9. ~~Deployment (Neon + Render + Vercel + weekly GitHub Actions refresh)~~
-10. Docs polish, responsible-gambling disclaimer page
+10. ~~Responsible-gambling disclaimer page~~, docs polish
 
 > GenPicks is a portfolio project for educational purposes and does not
 > provide betting advice.

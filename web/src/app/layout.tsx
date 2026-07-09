@@ -54,7 +54,10 @@ export default function RootLayout({
             GenPicks is a portfolio project for educational purposes and does
             not provide betting advice. Probabilities are model outputs, not
             offers. If gambling is a problem for you or someone you know, call
-            1800 858 858 (Gambling Help Online).
+            1800 858 858 (Gambling Help Online).{" "}
+            <Link href="/responsible-gambling" className="underline">
+              Responsible gambling
+            </Link>
           </p>
         </footer>
       </body>
