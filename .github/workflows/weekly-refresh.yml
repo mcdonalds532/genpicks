@@ -56,7 +56,7 @@ jobs:
           python -m genpicks.scrape --source nrl-teamlists --seasons $SEASON
           python -m genpicks.scrape --source oddsapi
 
-      - name: Ingest (order matters: rlp creates, nrl attaches)
+      - name: "Ingest (order matters: rlp creates, nrl attaches)"
         run: |
           python -m genpicks.ingest --source rlp --seasons $SEASON
           python -m genpicks.ingest --source nrl --seasons $SEASON
