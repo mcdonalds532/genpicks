@@ -4,10 +4,10 @@ Machine-learning predictions for NRL matches: win probabilities, anytime
 try-scorer and first try-scorer probabilities per player, converted to implied
 betting odds and compared against live market prices.
 
-**Status: phases 1–7 complete** — full data pipeline (2016–2026, four
-sources), trained models, serving API, Next.js frontend, live market odds,
-and official team lists driving the player markets. Next: auth + payments,
-deployment.
+**Live at [genpicks.vercel.app](https://genpicks.vercel.app)** — full data
+pipeline (2016–2026, four sources), trained models, serving API, Next.js
+frontend, live market odds, and official team lists driving the player
+markets, refreshed weekly by GitHub Actions. Next: auth + payments.
 
 Headline numbers on the held-out 2024–26 test seasons:
 
@@ -88,6 +88,27 @@ Neon/Supabase instance) and set `GENPICKS_DATABASE_URL` in `.env`.
 cd web; npm install; npm run dev
 ```
 
+## Deployment
+
+| Piece | Where | Notes |
+|---|---|---|
+| Frontend | Vercel | root directory `web/`, `API_URL` env pointing at the API |
+| API | Render (free tier, Docker) | `Dockerfile` at repo root; serving-only image, honors `$PORT`; needs `GENPICKS_DATABASE_URL` |
+| Database | Neon Postgres (Sydney) | seeded once via `pg_dump`/`pg_restore` from a fully-ingested local Postgres |
+| Refresh | GitHub Actions | `.github/workflows/weekly-refresh.yml` |
+
+The weekly workflow runs Monday 22:00 UTC (settles the finished round's
+results) and Wednesday 22:00 UTC (official team lists + fresh odds), then
+rescores upcoming fixtures. It needs two repo secrets:
+`GENPICKS_DATABASE_URL` and `GENPICKS_ODDS_API_KEY`. Every step is
+idempotent, so manual `workflow_dispatch` runs are always safe. Model
+artifacts are committed to the repo (< 1 MB per version), so CI scoring
+loads them straight from checkout — training stays a local, deliberate act.
+
+Free-tier trade-off: the Render instance sleeps after ~15 minutes idle and
+cold-starts in under a minute; the first page load after a quiet period is
+slow while the API wakes.
+
 ## Roadmap
 
 1. ~~Foundations: repo, schema, migrations~~
@@ -98,7 +119,8 @@ cd web; npm install; npm run dev
 6. ~~Next.js frontend: fixtures, match detail, prediction track record~~
 7. ~~Live odds (The Odds API) with model-vs-market display; official team lists~~
 8. Auth + Stripe subscription gating
-9. Deployment, docs, responsible-gambling disclaimer
+9. ~~Deployment (Neon + Render + Vercel + weekly GitHub Actions refresh)~~
+10. Docs polish, responsible-gambling disclaimer page
 
 > GenPicks is a portfolio project for educational purposes and does not
 > provide betting advice.
