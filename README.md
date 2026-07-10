@@ -7,7 +7,8 @@ betting odds and compared against live market prices.
 **Live at [genpicks.vercel.app](https://genpicks.vercel.app)** — full data
 pipeline (2016–2026, four sources), trained models, serving API, Next.js
 frontend, live market odds, and official team lists driving the player
-markets, refreshed weekly by GitHub Actions. Next: auth + payments.
+markets, refreshed weekly by GitHub Actions. GitHub sign-in with a
+Stripe test-mode demo paywall gates the player try-scorer markets.
 
 Headline numbers on the held-out 2024–26 test seasons:
 
@@ -141,9 +142,9 @@ construction.
 5. ~~FastAPI serving layer with batch prediction jobs~~
 6. ~~Next.js frontend: fixtures, match detail, prediction track record~~
 7. ~~Live odds (The Odds API) with model-vs-market display; official team lists~~
-8. Auth + Stripe subscription gating
+8. ~~Auth + Stripe subscription gating~~
 9. ~~Deployment (Neon + Render + Vercel + weekly GitHub Actions refresh)~~
-10. ~~Responsible-gambling disclaimer page~~, docs polish
+10. ~~Responsible-gambling disclaimer page, docs polish~~
 
 > GenPicks is a portfolio project for educational purposes and does not
 > provide betting advice.
