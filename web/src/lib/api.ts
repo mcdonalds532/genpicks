@@ -44,8 +44,12 @@ export type MatchMarkets = {
   away_team: string | null;
   date: string | null;
   h2h: { home?: WinProbability; away?: WinProbability };
-  anytime_try: PlayerMarketEntry[];
-  first_try: PlayerMarketEntry[];
+  // null when locked: the API withholds try markets unless the request
+  // proves an entitled viewer (internal key + subscribed user id)
+  anytime_try: PlayerMarketEntry[] | null;
+  first_try: PlayerMarketEntry[] | null;
+  try_markets_locked: boolean;
+  try_market_counts: { anytime_try: number; first_try: number };
   market_odds: MarketOdds;
   lineup_source: "official" | "projected" | null;
 };
@@ -55,9 +59,9 @@ export type TrackRecord = Record<
   { settled: number; accuracy: number; log_loss: number }
 >;
 
-async function get<T>(path: string): Promise<T | null> {
+async function get<T>(path: string, headers?: Record<string, string>): Promise<T | null> {
   try {
-    const res = await fetch(`${API_URL}${path}`);
+    const res = await fetch(`${API_URL}${path}`, { headers });
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {
@@ -68,8 +72,18 @@ async function get<T>(path: string): Promise<T | null> {
 export const getUpcoming = (limit = 20) =>
   get<UpcomingMatch[]>(`/matches/upcoming?limit=${limit}`);
 
-export const getMatchMarkets = (matchId: string) =>
-  get<MatchMarkets>(`/matches/${matchId}/markets`);
+// The signed-in viewer's user id travels with the internal key; the API
+// decides entitlement against the subscription in the database.
+export const getMatchMarkets = (matchId: string, userId?: number | null) =>
+  get<MatchMarkets>(
+    `/matches/${matchId}/markets`,
+    userId == null
+      ? undefined
+      : {
+          "X-Internal-Key": process.env.GENPICKS_INTERNAL_API_KEY ?? "",
+          "X-User-Id": String(userId),
+        },
+  );
 
 export const getTrackRecord = () => get<TrackRecord>(`/track-record`);
 

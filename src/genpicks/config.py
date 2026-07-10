@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     # comma-separated origins allowed to call the API from a browser;
     # the deployed frontend's domain goes here
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+    # shared secret between the Next.js server and the API: authorizes the
+    # internal user-sync endpoint and unlocks gated markets for subscribed
+    # users. Unset (the default) fails closed: sync is unavailable and try
+    # markets stay locked for everyone.
+    internal_api_key: str | None = None
 
 
 @lru_cache

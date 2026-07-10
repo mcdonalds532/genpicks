@@ -228,6 +228,33 @@ class TeamListEntry(Base):
 
 
 # --------------------------------------------------------------------------
+# Accounts
+# --------------------------------------------------------------------------
+
+
+class User(Base):
+    """A website account, created on first OAuth sign-in.
+
+    Rows are written only by the Next.js server through the internal
+    user-sync endpoint (shared-key protected), never by ingestion. Stripe
+    fields stay null until the test-mode checkout flow fills them in;
+    subscription_status mirrors Stripe's status string ("active",
+    "canceled", ...) and null means never subscribed.
+    """
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    github_id: Mapped[str] = mapped_column(String(30), unique=True)
+    email: Mapped[str | None] = mapped_column(String(255))
+    name: Mapped[str | None] = mapped_column(String(150))
+    avatar_url: Mapped[str | None] = mapped_column(String(300))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(100), unique=True)
+    subscription_status: Mapped[str | None] = mapped_column(String(30))
+
+
+# --------------------------------------------------------------------------
 # Odds and predictions
 # --------------------------------------------------------------------------
 

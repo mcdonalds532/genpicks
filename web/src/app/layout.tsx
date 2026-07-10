@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import { UserMenu } from "@/components/user-menu";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -31,7 +32,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <header className="border-b border-hairline bg-surface">
-          <nav className="mx-auto flex max-w-4xl items-baseline gap-6 px-4 py-4">
+          <nav className="mx-auto flex max-w-4xl items-center gap-6 px-4 py-4">
             <Link href="/" className="text-lg font-semibold tracking-tight">
               GenPicks
             </Link>
@@ -44,6 +45,7 @@ export default function RootLayout({
             >
               Track record
             </Link>
+            <UserMenu />
           </nav>
         </header>
         <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">

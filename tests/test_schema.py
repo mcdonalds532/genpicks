@@ -30,6 +30,7 @@ def test_all_tables_created(session):
         "try_events",
         "odds_snapshots",
         "predictions",
+        "users",
     }
     assert expected == set(Base.metadata.tables)
 

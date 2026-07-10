@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
+import { auth, signIn } from "@/auth";
 import {
   formatOdds,
   formatPercent,
   getMatchMarkets,
+  type MatchMarkets,
   type PlayerMarketEntry,
 } from "@/lib/api";
 import { MarketOddsLine } from "@/components/market-odds";
@@ -74,13 +76,61 @@ function MarketTable({
   );
 }
 
+// Shown in place of the try-scorer tables when the API withheld them.
+// The real enforcement is server-side in the API; this is just its UI.
+function LockedMarkets({
+  markets,
+  signedIn,
+  matchId,
+}: {
+  markets: MatchMarkets;
+  signedIn: boolean;
+  matchId: string;
+}) {
+  const total =
+    markets.try_market_counts.anytime_try + markets.try_market_counts.first_try;
+  return (
+    <section className="rounded-lg border border-hairline bg-surface p-6 text-center">
+      <h2 className="mb-1 text-sm font-semibold">
+        Player try markets are a Pro feature
+      </h2>
+      <p className="mx-auto mb-4 max-w-md text-sm text-muted">
+        {total > 0
+          ? `${total} model prices for this match — anytime and first try scorer, with implied odds — unlock with a GenPicks Pro subscription.`
+          : "Anytime and first try scorer prices unlock with a GenPicks Pro subscription."}
+      </p>
+      {signedIn ? (
+        <p className="text-sm text-ink-2">
+          Subscriptions launch soon (demo checkout — this is a portfolio
+          project; no real payments).
+        </p>
+      ) : (
+        <form
+          action={async () => {
+            "use server";
+            await signIn("github", { redirectTo: `/matches/${matchId}` });
+          }}
+        >
+          <button
+            type="submit"
+            className="rounded-md border border-hairline px-4 py-2 text-sm font-medium hover:text-ink"
+          >
+            Sign in with GitHub to get started
+          </button>
+        </form>
+      )}
+    </section>
+  );
+}
+
 export default async function MatchPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const markets = await getMatchMarkets(id);
+  const session = await auth();
+  const markets = await getMatchMarkets(id, session?.genpicksUserId);
   if (markets === null) notFound();
 
   return (
@@ -100,19 +150,27 @@ export default async function MatchPage({
           <MarketOddsLine odds={markets.market_odds} />
         </div>
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
-        <MarketTable
-          title="Anytime try scorer"
-          entries={markets.anytime_try}
-          homeTeam={markets.home_team}
+      {markets.try_markets_locked ? (
+        <LockedMarkets
+          markets={markets}
+          signedIn={session?.user != null}
+          matchId={id}
         />
-        <MarketTable
-          title="First try scorer"
-          entries={markets.first_try}
-          homeTeam={markets.home_team}
-        />
-      </div>
-      {markets.lineup_source !== null && (
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          <MarketTable
+            title="Anytime try scorer"
+            entries={markets.anytime_try ?? []}
+            homeTeam={markets.home_team}
+          />
+          <MarketTable
+            title="First try scorer"
+            entries={markets.first_try ?? []}
+            homeTeam={markets.home_team}
+          />
+        </div>
+      )}
+      {!markets.try_markets_locked && markets.lineup_source !== null && (
         <p className="mt-4 text-xs text-muted">
           {markets.lineup_source === "official"
             ? "Player markets use the officially named team lists."

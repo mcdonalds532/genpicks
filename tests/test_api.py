@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from genpicks.api.main import app, get_session
+from genpicks.config import get_settings
 from genpicks.db.models import (
     Base,
     Match,
@@ -16,10 +17,15 @@ from genpicks.db.models import (
     Player,
     Prediction,
     Team,
+    User,
     Venue,
 )
 
 TODAY = date.today()
+
+INTERNAL_KEY = "test-internal-key"
+SUBSCRIBED = {"X-Internal-Key": INTERNAL_KEY, "X-User-Id": "1"}
+FREE_USER = {"X-Internal-Key": INTERNAL_KEY, "X-User-Id": "2"}
 
 
 @pytest.fixture()
@@ -51,6 +57,13 @@ def client():
             ]
         )
         now = datetime.now(timezone.utc)
+        session.add_all(
+            [
+                User(id=1, github_id="100", name="Paying Punter",
+                     created_at=now, subscription_status="active"),
+                User(id=2, github_id="200", name="Free Fan", created_at=now),
+            ]
+        )
         session.add_all(
             [
                 Prediction(model_version="v_test", match_id=1, market="h2h",
@@ -108,7 +121,11 @@ def client():
             yield session
 
     app.dependency_overrides[get_session] = override
+    settings = get_settings()
+    previous_key = settings.internal_api_key
+    settings.internal_api_key = INTERNAL_KEY
     yield TestClient(app)
+    settings.internal_api_key = previous_key
     app.dependency_overrides.clear()
 
 
@@ -131,8 +148,9 @@ def test_upcoming_lists_fixture_with_probabilities(client):
 
 
 def test_match_markets_serve_newest_generation_only(client):
-    body = client.get("/matches/2/markets").json()
+    body = client.get("/matches/2/markets", headers=SUBSCRIBED).json()
     assert body["h2h"]["home"]["probability"] == 0.55
+    assert body["try_markets_locked"] is False
     assert body["anytime_try"][0] == {
         "player": "Flash Winger",
         "team": "Alpha",
@@ -144,6 +162,53 @@ def test_match_markets_serve_newest_generation_only(client):
     assert [e["probability"] for e in body["first_try"]] == [0.1]
     assert body["lineup_source"] == "official"
     assert client.get("/matches/999/markets").status_code == 404
+
+
+def test_try_markets_locked_without_entitled_viewer(client):
+    # anonymous, free signed-in user, wrong key, unknown user: all locked
+    for headers in (
+        {},
+        FREE_USER,
+        {"X-Internal-Key": "wrong", "X-User-Id": "1"},
+        {"X-Internal-Key": INTERNAL_KEY, "X-User-Id": "999"},
+    ):
+        body = client.get("/matches/2/markets", headers=headers).json()
+        assert body["try_markets_locked"] is True
+        assert body["anytime_try"] is None
+        assert body["first_try"] is None
+        # free content and the unlock teaser still served
+        assert body["h2h"]["home"]["probability"] == 0.55
+        assert body["try_market_counts"] == {"anytime_try": 2, "first_try": 1}
+
+
+def test_user_sync_upserts_and_reports_subscription(client):
+    unauthorized = client.post(
+        "/internal/users/sync", json={"github_id": "300"},
+        headers={"X-Internal-Key": "wrong"},
+    )
+    assert unauthorized.status_code == 401
+
+    created = client.post(
+        "/internal/users/sync",
+        json={"github_id": "300", "email": "new@x.com", "name": "New User"},
+        headers={"X-Internal-Key": INTERNAL_KEY},
+    ).json()
+    assert created["subscription_active"] is False
+
+    # same github id: updates the profile, keeps the row
+    updated = client.post(
+        "/internal/users/sync",
+        json={"github_id": "300", "email": "renamed@x.com", "name": "Renamed"},
+        headers={"X-Internal-Key": INTERNAL_KEY},
+    ).json()
+    assert updated["user_id"] == created["user_id"]
+
+    subscribed = client.post(
+        "/internal/users/sync", json={"github_id": "100"},
+        headers={"X-Internal-Key": INTERNAL_KEY},
+    ).json()
+    assert subscribed["user_id"] == 1
+    assert subscribed["subscription_active"] is True
 
 
 def test_market_odds_serve_newest_snapshot_best_price(client):

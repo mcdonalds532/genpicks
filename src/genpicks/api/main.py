@@ -6,15 +6,19 @@ Run locally:
 Endpoints:
     GET /health
     GET /matches/upcoming            fixtures with win probs + implied odds
-    GET /matches/{match_id}/markets  all markets for one match
+    GET /matches/{match_id}/markets  all markets for one match; try markets
+                                     require an entitled internal caller
     GET /track-record                settled h2h predictions vs results
+    POST /internal/users/sync        upsert a user on OAuth sign-in
+                                     (Next.js server only, shared key)
 """
 
 import math
-from datetime import date
+from datetime import date, datetime, timezone
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -28,6 +32,7 @@ from genpicks.db.models import (
     Player,
     Prediction,
     Team,
+    User,
     Venue,
 )
 
@@ -125,6 +130,61 @@ def _sided_odds(odds: dict | None, match: Match) -> dict | None:
     }
 
 
+def _is_internal(key: str | None) -> bool:
+    """True when the caller presented the shared Next.js-server key.
+
+    Fails closed: with no key configured, nothing is internal and gated
+    content stays locked for everyone.
+    """
+    configured = get_settings().internal_api_key
+    return bool(configured) and key == configured
+
+
+def _viewer_subscribed(
+    session: Session, internal_key: str | None, user_id: str | None
+) -> bool:
+    if not _is_internal(internal_key) or not user_id:
+        return False
+    try:
+        user = session.get(User, int(user_id))
+    except ValueError:
+        return False
+    return user is not None and user.subscription_status == "active"
+
+
+class UserSyncPayload(BaseModel):
+    github_id: str
+    email: str | None = None
+    name: str | None = None
+    avatar_url: str | None = None
+
+
+@app.post("/internal/users/sync")
+def sync_user(
+    payload: UserSyncPayload,
+    x_internal_key: str | None = Header(default=None),
+    session: Session = Depends(get_session),
+):
+    """Upsert a user on OAuth sign-in; profile fields refresh every call."""
+    if not _is_internal(x_internal_key):
+        raise HTTPException(401, "invalid internal key")
+    user = session.scalar(select(User).where(User.github_id == payload.github_id))
+    if user is None:
+        user = User(
+            github_id=payload.github_id,
+            created_at=datetime.now(timezone.utc),
+        )
+        session.add(user)
+    user.email = payload.email
+    user.name = payload.name
+    user.avatar_url = payload.avatar_url
+    session.commit()
+    return {
+        "user_id": user.id,
+        "subscription_active": user.subscription_status == "active",
+    }
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -175,6 +235,8 @@ def upcoming_matches(limit: int = 20, session: Session = Depends(get_session)):
 
 @app.get("/matches/{match_id}/markets")
 def match_markets(match_id: int, top: int = 10,
+                  x_internal_key: str | None = Header(default=None),
+                  x_user_id: str | None = Header(default=None),
                   session: Session = Depends(get_session)):
     match = session.get(Match, match_id)
     if match is None:
@@ -214,6 +276,11 @@ def match_markets(match_id: int, top: int = 10,
 
     anytime, anytime_source = player_market(MARKET_ANYTIME_TRY)
     first, first_source = player_market(MARKET_FIRST_TRY)
+    # Try-scorer markets are the paid tier. The check lives here — not only
+    # in the frontend — so a direct request to the public API can't bypass
+    # the paywall: without the internal key + a subscribed user, the tables
+    # are withheld and only their row counts are disclosed.
+    locked = not _viewer_subscribed(session, x_internal_key, x_user_id)
     h2h = _latest_h2h(session, [match_id]).get(match_id, [])
     return {
         "match_id": match_id,
@@ -227,8 +294,11 @@ def match_markets(match_id: int, top: int = 10,
             }
             for p in h2h
         },
-        "anytime_try": anytime,
-        "first_try": first,
+        "anytime_try": None if locked else anytime,
+        "first_try": None if locked else first,
+        "try_markets_locked": locked,
+        # row counts let the locked panel say what the subscription unlocks
+        "try_market_counts": {"anytime_try": len(anytime), "first_try": len(first)},
         "market_odds": _sided_odds(
             _latest_market_odds(session, [match_id]).get(match_id), match
         ),
