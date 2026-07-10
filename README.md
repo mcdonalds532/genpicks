@@ -109,6 +109,29 @@ Free-tier trade-off: the Render instance sleeps after ~15 minutes idle and
 cold-starts in under a minute; the first page load after a quiet period is
 slow while the API wakes.
 
+## Accounts and the demo paywall
+
+Sign-in is GitHub OAuth via Auth.js (JWT sessions; users live in the same
+Postgres schema, synced through an internal API endpoint). Match win
+probabilities and the track record are free; the player try-scorer markets
+sit behind a **demo subscription paywall**, enforced in the API itself —
+the public endpoint withholds those markets unless the request proves an
+entitled viewer, so the paywall can't be bypassed by calling the API
+directly.
+
+**The checkout is a demonstration, permanently in Stripe test mode.** No
+real payments are possible: selling model picks for real money is regulated
+territory, and this is a portfolio project. Use Stripe's test card
+`4242 4242 4242 4242` (any future expiry/CVC) to walk the full flow:
+hosted checkout → webhook (`checkout.session.completed`) → subscription
+flag in Postgres → markets unlock. Env: the web app needs `AUTH_SECRET`,
+`AUTH_GITHUB_ID`/`AUTH_GITHUB_SECRET`, and `GENPICKS_INTERNAL_API_KEY`
+(shared with the API); the API additionally takes
+`GENPICKS_STRIPE_SECRET_KEY`, `GENPICKS_STRIPE_PRICE_ID`, and
+`GENPICKS_STRIPE_WEBHOOK_SECRET`. The checkout endpoint refuses to run
+with anything but an `sk_test_` key, so the paywall stays a demo by
+construction.
+
 ## Roadmap
 
 1. ~~Foundations: repo, schema, migrations~~

@@ -1,6 +1,8 @@
-import { notFound } from "next/navigation";
+import { headers } from "next/headers";
+import { notFound, redirect } from "next/navigation";
 import { auth, signIn } from "@/auth";
 import {
+  createCheckoutUrl,
   formatOdds,
   formatPercent,
   getMatchMarkets,
@@ -100,10 +102,33 @@ function LockedMarkets({
           : "Anytime and first try scorer prices unlock with a GenPicks Pro subscription."}
       </p>
       {signedIn ? (
-        <p className="text-sm text-ink-2">
-          Subscriptions launch soon (demo checkout — this is a portfolio
-          project; no real payments).
-        </p>
+        <form
+          action={async () => {
+            "use server";
+            const session = await auth();
+            const path = `/matches/${matchId}`;
+            if (!session?.genpicksUserId) redirect(path);
+            const h = await headers();
+            const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
+            const url = await createCheckoutUrl(
+              session.genpicksUserId,
+              origin,
+              path,
+            );
+            redirect(url ?? `${path}?billing=unavailable`);
+          }}
+        >
+          <button
+            type="submit"
+            className="rounded-md border border-hairline px-4 py-2 text-sm font-medium hover:text-ink"
+          >
+            Subscribe — demo checkout
+          </button>
+          <p className="mt-2 text-xs text-muted">
+            Portfolio demo: Stripe test mode, no real payments. Use card
+            number 4242 4242 4242 4242 with any future expiry and CVC.
+          </p>
+        </form>
       ) : (
         <form
           action={async () => {
@@ -125,16 +150,35 @@ function LockedMarkets({
 
 export default async function MatchPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ subscribed?: string; billing?: string }>;
 }) {
   const { id } = await params;
+  const { subscribed, billing } = await searchParams;
   const session = await auth();
   const markets = await getMatchMarkets(id, session?.genpicksUserId);
   if (markets === null) notFound();
 
+  // post-checkout return states: the webhook can lag the redirect by a
+  // few seconds, so "paid but still locked" gets its own message
+  const banner =
+    subscribed === "1"
+      ? markets.try_markets_locked
+        ? "Payment received — your subscription is activating. Refresh in a few seconds."
+        : "GenPicks Pro is active — player try markets unlocked."
+      : billing === "unavailable"
+        ? "Checkout is currently unavailable — please try again shortly."
+        : null;
+
   return (
     <div>
+      {banner !== null && (
+        <p className="mb-4 rounded-md border border-hairline bg-surface px-4 py-2.5 text-sm text-ink-2">
+          {banner}
+        </p>
+      )}
       <div className="mb-6">
         <p className="mb-1 text-xs text-muted">{markets.date}</p>
         <h1 className="mb-4 text-xl font-semibold tracking-tight">

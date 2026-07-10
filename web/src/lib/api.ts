@@ -87,6 +87,33 @@ export const getMatchMarkets = (matchId: string, userId?: number | null) =>
 
 export const getTrackRecord = () => get<TrackRecord>(`/track-record`);
 
+// Asks the API for a Stripe hosted-checkout URL (test mode — demo checkout).
+// Returns null when billing is unconfigured or the API is unreachable.
+export async function createCheckoutUrl(
+  userId: number,
+  origin: string,
+  returnPath: string,
+): Promise<string | null> {
+  try {
+    const res = await fetch(`${API_URL}/internal/billing/checkout`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Key": process.env.GENPICKS_INTERNAL_API_KEY ?? "",
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        success_url: `${origin}${returnPath}?subscribed=1`,
+        cancel_url: `${origin}${returnPath}`,
+      }),
+    });
+    if (!res.ok) return null;
+    return ((await res.json()) as { url: string }).url;
+  } catch {
+    return null;
+  }
+}
+
 export const formatPercent = (p: number) => `${(p * 100).toFixed(1)}%`;
 
 export const formatOdds = (odds: number | null) =>

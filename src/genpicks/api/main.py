@@ -11,6 +11,8 @@ Endpoints:
     GET /track-record                settled h2h predictions vs results
     POST /internal/users/sync        upsert a user on OAuth sign-in
                                      (Next.js server only, shared key)
+    POST /internal/billing/checkout  Stripe hosted-checkout URL (billing.py)
+    POST /webhooks/stripe            subscription lifecycle (billing.py)
 """
 
 import math
@@ -19,9 +21,11 @@ from datetime import date, datetime, timezone
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
+from genpicks.api.billing import router as billing_router
+from genpicks.api.deps import get_session, is_internal
 from genpicks.config import get_settings
 from genpicks.db.models import (
     MARKET_ANYTIME_TRY,
@@ -50,17 +54,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_engine = None
-_session_factory = None
-
-
-def get_session():
-    global _engine, _session_factory
-    if _session_factory is None:
-        _engine = create_engine(get_settings().database_url)
-        _session_factory = sessionmaker(_engine)
-    with _session_factory() as session:
-        yield session
+app.include_router(billing_router)
 
 
 def implied_odds(probability: float) -> float | None:
@@ -130,20 +124,10 @@ def _sided_odds(odds: dict | None, match: Match) -> dict | None:
     }
 
 
-def _is_internal(key: str | None) -> bool:
-    """True when the caller presented the shared Next.js-server key.
-
-    Fails closed: with no key configured, nothing is internal and gated
-    content stays locked for everyone.
-    """
-    configured = get_settings().internal_api_key
-    return bool(configured) and key == configured
-
-
 def _viewer_subscribed(
     session: Session, internal_key: str | None, user_id: str | None
 ) -> bool:
-    if not _is_internal(internal_key) or not user_id:
+    if not is_internal(internal_key) or not user_id:
         return False
     try:
         user = session.get(User, int(user_id))
@@ -166,7 +150,7 @@ def sync_user(
     session: Session = Depends(get_session),
 ):
     """Upsert a user on OAuth sign-in; profile fields refresh every call."""
-    if not _is_internal(x_internal_key):
+    if not is_internal(x_internal_key):
         raise HTTPException(401, "invalid internal key")
     user = session.scalar(select(User).where(User.github_id == payload.github_id))
     if user is None:

@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     # users. Unset (the default) fails closed: sync is unavailable and try
     # markets stay locked for everyone.
     internal_api_key: str | None = None
+    # Stripe TEST-MODE keys only: this is a portfolio demo checkout, real
+    # payments for model picks would be regulated territory. Unset means
+    # billing endpoints return 503.
+    stripe_secret_key: str | None = None
+    stripe_webhook_secret: str | None = None
+    # price id of the recurring GenPicks Pro test product
+    stripe_price_id: str | None = None
 
 
 @lru_cache
