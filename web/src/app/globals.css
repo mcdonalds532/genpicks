@@ -26,6 +26,9 @@
   --color-hairline: var(--hairline);
   --color-series-home: var(--series-home);
   --color-series-away: var(--series-away);
+  /* Track-record charts: same two validated slots, chart-local roles */
+  --color-series-model: var(--series-home);
+  --color-series-market: var(--series-away);
   --color-bar-hue: var(--bar-hue);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
