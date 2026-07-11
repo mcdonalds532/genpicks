@@ -56,7 +56,9 @@ select = [
 ]
 
 [tool.mypy]
-python_version = "3.11"
+# 3.12 (the CI interpreter), not the 3.11 floor: numpy's stubs use the
+# `type` statement, which mypy refuses to parse in 3.11 mode
+python_version = "3.12"
 mypy_path = "src"
 packages = ["genpicks"]
 check_untyped_defs = true
