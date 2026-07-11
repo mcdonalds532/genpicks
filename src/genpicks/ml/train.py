@@ -93,6 +93,66 @@ def metrics(y_true: np.ndarray, prob: np.ndarray) -> dict:
     }
 
 
+def _logit(p: np.ndarray) -> np.ndarray:
+    p = np.clip(p, 1e-6, 1 - 1e-6)
+    return np.log(p / (1 - p)).reshape(-1, 1)
+
+
+def fit_fold(
+    train: pd.DataFrame,
+    val: pd.DataFrame,
+    test: pd.DataFrame,
+    feature_columns: list[str] = FEATURE_COLUMNS,
+) -> dict:
+    """Boost on train, early-stop + Platt-calibrate on val, score test.
+
+    The one training procedure, shared by the artifact build (fixed split)
+    and walk-forward validation so their numbers are comparable by
+    construction. Returns the booster, calibrator params, and calibrated
+    test probabilities aligned with test's row order.
+    """
+
+    def xy(frame):
+        return frame[feature_columns].astype(float), frame["home_win"].to_numpy()
+
+    x_train, y_train = xy(train)
+    x_val, y_val = xy(val)
+
+    dtrain = xgb.DMatrix(x_train, label=y_train, feature_names=feature_columns)
+    dval = xgb.DMatrix(x_val, label=y_val, feature_names=feature_columns)
+    dtest = xgb.DMatrix(test[feature_columns].astype(float), feature_names=feature_columns)
+
+    booster = xgb.train(
+        XGB_PARAMS,
+        dtrain,
+        num_boost_round=NUM_ROUNDS,
+        evals=[(dtrain, "train"), (dval, "val")],
+        early_stopping_rounds=EARLY_STOPPING,
+        verbose_eval=False,
+    )
+    iteration_range = (0, booster.best_iteration + 1)
+    val_prob = booster.predict(dval, iteration_range=iteration_range)
+    test_prob = booster.predict(dtest, iteration_range=iteration_range)
+
+    # Platt scaling on the validation set: isotonic needs more than ~400
+    # points to help (first run it cost 0.035 log loss); a two-parameter
+    # sigmoid on the logit cannot overfit that way.
+    calibrator = LogisticRegression(C=1e6)
+    calibrator.fit(_logit(val_prob), y_val)
+    test_prob_cal = calibrator.predict_proba(_logit(test_prob))[:, 1]
+
+    return {
+        "booster": booster,
+        "best_iteration": int(booster.best_iteration),
+        "platt": {
+            "coef": float(calibrator.coef_[0][0]),
+            "intercept": float(calibrator.intercept_[0]),
+        },
+        "test_prob_raw": test_prob,
+        "test_prob": test_prob_cal,
+    }
+
+
 def calibration_table(y_true: np.ndarray, prob: np.ndarray, bins: int = 10) -> list:
     table = []
     edges = np.linspace(0, 1, bins + 1)
@@ -137,40 +197,14 @@ def main(argv: list[str] | None = None) -> None:
     for name, frame in splits.items():
         logger.info("%s: %d matches (%s)", name, len(frame), sorted(frame["season"].unique()))
 
-    def xy(frame):
-        return frame[FEATURE_COLUMNS].astype(float), frame["home_win"].to_numpy()
+    fold = fit_fold(splits["train"], splits["val"], splits["test"])
+    booster = fold["booster"]
+    logger.info("best iteration: %d", fold["best_iteration"])
 
-    x_train, y_train = xy(splits["train"])
-    x_val, y_val = xy(splits["val"])
-    x_test, y_test = xy(splits["test"])
-
-    dtrain = xgb.DMatrix(x_train, label=y_train, feature_names=FEATURE_COLUMNS)
-    dval = xgb.DMatrix(x_val, label=y_val, feature_names=FEATURE_COLUMNS)
-    dtest = xgb.DMatrix(x_test, feature_names=FEATURE_COLUMNS)
-
-    booster = xgb.train(
-        XGB_PARAMS,
-        dtrain,
-        num_boost_round=NUM_ROUNDS,
-        evals=[(dtrain, "train"), (dval, "val")],
-        early_stopping_rounds=EARLY_STOPPING,
-        verbose_eval=False,
-    )
-    logger.info("best iteration: %d", booster.best_iteration)
-
-    val_prob = booster.predict(dval, iteration_range=(0, booster.best_iteration + 1))
-    test_prob = booster.predict(dtest, iteration_range=(0, booster.best_iteration + 1))
-
-    # Platt scaling on the validation set: isotonic needs more than ~400
-    # points to help (first run it cost 0.035 log loss); a two-parameter
-    # sigmoid on the logit cannot overfit that way.
-    def logit(p):
-        p = np.clip(p, 1e-6, 1 - 1e-6)
-        return np.log(p / (1 - p)).reshape(-1, 1)
-
-    calibrator = LogisticRegression(C=1e6)
-    calibrator.fit(logit(val_prob), y_val)
-    test_prob_cal = calibrator.predict_proba(logit(test_prob))[:, 1]
+    y_train = splits["train"]["home_win"].to_numpy()
+    y_test = splits["test"]["home_win"].to_numpy()
+    test_prob = fold["test_prob_raw"]
+    test_prob_cal = fold["test_prob"]
 
     test = splits["test"].copy()
     test["model_prob"] = test_prob
@@ -183,7 +217,7 @@ def main(argv: list[str] | None = None) -> None:
     report = {
         "model_version": f"match_winner_v0.1_{date.today():%Y%m%d}",
         "splits": {k: sorted(int(s) for s in v["season"].unique()) for k, v in splits.items()},
-        "best_iteration": int(booster.best_iteration),
+        "best_iteration": fold["best_iteration"],
         "test_all": {
             "model_raw": metrics(y_test, test_prob),
             "model_calibrated": metrics(y_test, test_prob_cal),
@@ -208,10 +242,7 @@ def main(argv: list[str] | None = None) -> None:
     out_dir = args.out / report["model_version"]
     out_dir.mkdir(parents=True, exist_ok=True)
     booster.save_model(out_dir / "model.json")
-    report["calibrator_platt"] = {
-        "coef": float(calibrator.coef_[0][0]),
-        "intercept": float(calibrator.intercept_[0]),
-    }
+    report["calibrator_platt"] = fold["platt"]
     (out_dir / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     logger.info("saved model + report to %s", out_dir)
     print(json.dumps(report, indent=2))
