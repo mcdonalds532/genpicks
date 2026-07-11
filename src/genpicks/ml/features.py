@@ -72,9 +72,7 @@ def _availability(state: _TeamState, lineup: set[int] | None, prefix: str) -> di
     if lineup is None or len(lineup) < MIN_LINEUP:
         return row
     if state.last_lineup:
-        row[f"{prefix}_returning_share"] = len(lineup & state.last_lineup) / len(
-            state.last_lineup
-        )
+        row[f"{prefix}_returning_share"] = len(lineup & state.last_lineup) / len(state.last_lineup)
     if len(state.lineup_history) >= MIN_LINEUP_HISTORY:
         threshold = REGULAR_SHARE * len(state.lineup_history)
         counts: dict[int, int] = {}
@@ -167,8 +165,7 @@ def build_match_dataset(engine: Engine, include_unplayed: bool = False) -> pd.Da
             select(
                 PlayerMatchStats.match_id, PlayerMatchStats.team_id, PlayerMatchStats.player_id
             ).where(
-                (PlayerMatchStats.minutes_played.is_(None))
-                | (PlayerMatchStats.minutes_played > 0)
+                (PlayerMatchStats.minutes_played.is_(None)) | (PlayerMatchStats.minutes_played > 0)
             )
         ):
             lineups.setdefault((match_id, team_id), set()).add(player_id)

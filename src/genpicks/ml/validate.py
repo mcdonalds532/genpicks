@@ -95,9 +95,7 @@ def evaluate(scored: pd.DataFrame, market: pd.DataFrame) -> dict:
 
     return {
         "pooled": block(scored),
-        "per_season": {
-            int(season): block(frame) for season, frame in scored.groupby("season")
-        },
+        "per_season": {int(season): block(frame) for season, frame in scored.groupby("season")},
     }
 
 

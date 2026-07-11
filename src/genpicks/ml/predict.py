@@ -72,9 +72,7 @@ def predict_h2h(session, engine, models_root: Path, upcoming_ids: set[int]) -> i
     rows = data[data["match_id"].isin(upcoming_ids)]
     if rows.empty:
         return 0
-    dmatrix = xgb.DMatrix(
-        rows[FEATURE_COLUMNS].astype(float), feature_names=FEATURE_COLUMNS
-    )
+    dmatrix = xgb.DMatrix(rows[FEATURE_COLUMNS].astype(float), feature_names=FEATURE_COLUMNS)
     # score at the report's best iteration — the published backtest replays
     # the artifact this way, and serving must be the same model it audits
     iteration_range = (0, report["best_iteration"] + 1)

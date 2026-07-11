@@ -61,13 +61,18 @@ def engine():
         # then round 6 sees team A lose five regulars (players 13-17)
         for match_id in range(1, 7):
             add_match(session, match_id, match_id)
-            lineup_a = TEAM_A_LINEUP if match_id < 6 else (TEAM_A_LINEUP - {13, 14, 15, 16, 17}) | {
-                41,
-                42,
-                43,
-                44,
-                45,
-            }
+            lineup_a = (
+                TEAM_A_LINEUP
+                if match_id < 6
+                else (TEAM_A_LINEUP - {13, 14, 15, 16, 17})
+                | {
+                    41,
+                    42,
+                    43,
+                    44,
+                    45,
+                }
+            )
             add_lineup(session, match_id, 1, lineup_a)
             add_lineup(session, match_id, 2, TEAM_B_LINEUP)
         session.commit()
