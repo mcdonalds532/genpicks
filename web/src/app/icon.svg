@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- The site's signature two-segment probability bar as a mark:
+       slot-1 blue over slot-2 aqua from the validated palette. -->
+  <rect x="2" y="7" width="19" height="8" rx="3" fill="#2a78d6"/>
+  <rect x="23" y="7" width="7" height="8" rx="3" fill="#1baf7a"/>
+  <rect x="2" y="17" width="11" height="8" rx="3" fill="#2a78d6"/>
+  <rect x="15" y="17" width="15" height="8" rx="3" fill="#1baf7a"/>
+</svg>

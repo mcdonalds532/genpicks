@@ -1,0 +1,1 @@
+GenPicks — machine-learning NRL win probabilities and try-scorer markets, scored in public against bookmaker closing odds.

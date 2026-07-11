@@ -21,7 +21,38 @@ Headline numbers on the held-out 2024–26 test seasons:
 - anytime try: log loss 0.4253 over 20,396 player-appearances, well
   calibrated below 50%
 
+The [track record page](https://genpicks.vercel.app/track-record) shows the
+backtest match by match — cumulative log loss against the market, a
+calibration plot, per-season breakdown — and the
+[methodology page](https://genpicks.vercel.app/methodology) explains how
+the models work in plain language.
+
 ## Architecture
+
+```mermaid
+flowchart LR
+  subgraph sources["Four sources"]
+    RLP["results archive"]
+    NRL["NRL.com stats,<br/>try order, team lists"]
+    ASB["closing odds"]
+    ODDS["The Odds API<br/>live prices"]
+  end
+  RAW[("data/raw<br/>immutable payloads")]
+  DB[("Postgres (prod)<br/>SQLite (dev)")]
+  ML["XGBoost + Poisson models<br/>(versioned artifacts, committed)"]
+  PRED[("predictions<br/>append-only")]
+  API["FastAPI<br/>Render"]
+  WEB["Next.js<br/>Vercel"]
+
+  RLP --> RAW
+  NRL --> RAW
+  ASB --> RAW
+  ODDS --> RAW
+  RAW -- "idempotent loaders,<br/>alias resolution" --> DB
+  DB --> ML --> PRED --> API --> WEB
+  GHA["GitHub Actions<br/>weekly refresh"] -.-> RAW
+  GHA -.-> PRED
+```
 
 - **Data pipeline** (Python): scrapers write raw payloads to `data/raw/`, an
   idempotent transform validates and loads them into the relational schema.

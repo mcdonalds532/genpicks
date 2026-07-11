@@ -45,6 +45,12 @@ export default function RootLayout({
             >
               Track record
             </Link>
+            <Link
+              href="/methodology"
+              className="text-sm text-ink-2 hover:text-ink"
+            >
+              Methodology
+            </Link>
             <UserMenu />
           </nav>
         </header>
