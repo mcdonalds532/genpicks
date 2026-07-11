@@ -45,17 +45,24 @@ export default function MethodologyPage() {
         <p className="mb-3 text-sm text-ink-2">
           A gradient-boosted model (XGBoost, deliberately small and heavily
           regularised) over pre-match features: an Elo rating maintained
-          across seasons with a home-ground offset, plus rolling form —
-          win rates, margins, and points for/against over the last 5 and 10
-          matches, rest days, and season context. Raw scores are then
-          calibrated with Platt scaling so a &quot;60%&quot; means 60%.
+          across seasons with a home-ground offset; rolling form — win
+          rates, margins, and points for/against over the last 5 and 10
+          matches; rest days and season context; travel — how far each side
+          travelled to the venue, and whether the nominal home team is
+          actually on its own patch (it isn&apos;t in Las Vegas); and lineup
+          availability — how much of the previous match&apos;s side returns,
+          and how many of the team&apos;s recent regulars are in today&apos;s
+          17, read from the officially published team lists. Raw scores are
+          then calibrated with Platt scaling so a &quot;60%&quot; means 60%.
         </p>
         <p className="mb-3 text-sm text-ink-2">
           The one rule everything obeys: features for a match are computed
           strictly from information available before kickoff. The pipeline
           snapshots each team&apos;s state first and only then lets the
           result update it, so nothing the model trains on could leak from
-          the future.
+          the future. Each match page shows the model&apos;s own accounting
+          — a &quot;why this price&quot; panel with how much each factor
+          pulled the probability toward either side.
         </p>
       </section>
 
@@ -93,8 +100,9 @@ export default function MethodologyPage() {
           is: they embed team news, injuries, and sharp money.
         </p>
         <p className="mb-3 text-sm text-ink-2">
-          On the 557 held-out matches the model scores 0.6498 against the
-          market&apos;s 0.6454 (a coin flip scores 0.693). The{" "}
+          On the 557 held-out matches the model scores 0.6454 — level with
+          the market&apos;s 0.6454 (a coin flip scores 0.693) — and calls
+          the winner more often, 65.0% to the market&apos;s 62.8%. The{" "}
           <Link href="/track-record" className="underline">
             track record page
           </Link>{" "}
@@ -103,6 +111,15 @@ export default function MethodologyPage() {
           live record, where every prediction is logged before kickoff and
           never rewritten.
         </p>
+        <p className="mb-3 text-sm text-ink-2">
+          One fixed split can get lucky, so the same model is also validated
+          walk-forward: retrained once per season from 2022 to 2026 using
+          only earlier seasons, then scored on that season out of sample —
+          exactly what an annual retrain would have done. Pooled over those
+          five seasons the market stays ahead (0.6352 vs 0.6150), mostly on
+          2022–23 when it was unusually sharp; the model closes the gap as
+          its training data grows, and is in front in 2026.
+        </p>
       </section>
 
       <section className="mb-8">
@@ -110,14 +127,13 @@ export default function MethodologyPage() {
           What the model doesn&apos;t know
         </h2>
         <p className="mb-3 text-sm text-ink-2">
-          The match-winner features are built from results alone. The model
-          doesn&apos;t yet read team lists for the win probability — so when
-          a star player is rested, bookmakers react and the model
-          doesn&apos;t. That is the main reason the market stays slightly
-          ahead, it explains most of the cases where the two disagree
-          sharply, and it&apos;s the next planned improvement. Treat large
-          model-vs-market gaps as information about what the model
-          can&apos;t see, not as free money.
+          The model now reads the official team lists, but it counts heads
+          rather than names: a missing regular is a missing regular, whether
+          he&apos;s the reserve hooker or the captain. It also can&apos;t see
+          late changes after lists are published, weather, referee
+          appointments, or where sharp money is moving — bookmakers price
+          all of that. Treat large model-vs-market gaps as information
+          about what the model can&apos;t see, not as free money.
         </p>
         <p className="mb-3 text-sm text-ink-2">
           GenPicks is a portfolio project for educational purposes and does

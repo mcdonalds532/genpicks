@@ -1,0 +1,126 @@
+{
+  "model_version": "try_scorer_v0.1_20260711",
+  "best_iteration": 517,
+  "splits": {
+    "train": [
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021
+    ],
+    "val": [
+      2022,
+      2023
+    ],
+    "test": [
+      2024,
+      2025,
+      2026
+    ]
+  },
+  "team_try_rate_test": {
+    "model": {
+      "deviance": 1.0506791373675484,
+      "mae": 1.6012128668309111
+    },
+    "league_mean": {
+      "deviance": 1.1626605642081087,
+      "mae": 1.667261445816178
+    },
+    "rolling_form_10": {
+      "deviance": 1.1420695897468873,
+      "mae": 1.6779964221824686
+    },
+    "n": 1118,
+    "league_mean_tries": 3.5583475298126066
+  },
+  "anytime_try_test": {
+    "model": {
+      "log_loss": 0.42532869735493184,
+      "base_rate": 0.18444793096685624,
+      "n": 20396
+    },
+    "position_prior_only": {
+      "log_loss": 0.42743497601484925
+    },
+    "reliability": [
+      {
+        "bin": "0.00-0.10",
+        "n": 7224,
+        "predicted": 0.058772553495584856,
+        "actual": 0.0701827242524917
+      },
+      {
+        "bin": "0.10-0.20",
+        "n": 5800,
+        "predicted": 0.1446659953647745,
+        "actual": 0.13482758620689655
+      },
+      {
+        "bin": "0.20-0.30",
+        "n": 3382,
+        "predicted": 0.2476516867367009,
+        "actual": 0.24659964518036664
+      },
+      {
+        "bin": "0.30-0.40",
+        "n": 2364,
+        "predicted": 0.34539430029889284,
+        "actual": 0.3840947546531303
+      },
+      {
+        "bin": "0.40-0.50",
+        "n": 1220,
+        "predicted": 0.44067691043247115,
+        "actual": 0.4377049180327869
+      },
+      {
+        "bin": "0.50-1.00",
+        "n": 406,
+        "predicted": 0.5499029948431542,
+        "actual": 0.4852216748768473
+      }
+    ]
+  },
+  "first_try_test": {
+    "n_matches": 534,
+    "model": {
+      "mean_neg_log_prob": 3.2613305930586205,
+      "top1_hit_rate": 0.0898876404494382,
+      "top3_hit_rate": 0.24344569288389514
+    },
+    "uniform_lineup": {
+      "mean_neg_log_prob": 3.596467496813161,
+      "top1_expected": 0.029411764705882353
+    }
+  },
+  "position_priors": {
+    "Wing": 0.1501,
+    "Fullback": 0.0978,
+    "Centre": 0.0925,
+    "Five-eighth": 0.0662,
+    "Halfback": 0.0591,
+    "Second row": 0.0561,
+    "Hooker": 0.0328,
+    "Lock": 0.029,
+    "Front row": 0.0206,
+    "Bench": 0.0194,
+    "Interchange": 0.0,
+    "Reserve": 0.0
+  },
+  "feature_importance_gain": {
+    "opp_tries_against_10": 11.33,
+    "tries_for_5": 6.43,
+    "tries_for_10": 6.19,
+    "opp_tries_against_5": 5.86,
+    "season_tries_per_game": 5.22,
+    "is_home": 4.21,
+    "tries_against_5": 3.85,
+    "tries_against_10": 3.61,
+    "opp_tries_for_10": 3.37,
+    "round_number": 3.09,
+    "opp_tries_for_5": 2.75
+  }
+}

@@ -14,8 +14,14 @@ Stripe test-mode demo paywall gates the player try-scorer markets.
 
 Headline numbers on the held-out 2024–26 test seasons:
 
-- match winner: **0.6498 log loss vs 0.6454 for bookmaker closing odds**
-  (Elo-only 0.6533, always-home 0.6821), 557 matches
+- match winner: **0.6454 log loss — level with the bookmaker closing odds
+  (0.6454) — and ahead on accuracy, 65.0% vs 62.8%** (Elo-only 0.6533,
+  always-home 0.6821), 557 matches
+- the fixed split is backed by walk-forward validation
+  (`python -m genpicks.ml.validate`: one retrain per season 2022–26 on
+  strictly earlier data, [report](data/models/walkforward.json)) — pooled
+  0.6352 vs 0.6150 for the market, which was much sharper in 2022–23;
+  the model closes the gap as training data grows and is ahead in 2026
 - first try scorer: top-1 hit rate 9.0%, top-3 24.3% (uniform lineup: 2.9%),
   534 matches with verified try order
 - anytime try: log loss 0.4253 over 20,396 player-appearances, well
@@ -64,14 +70,18 @@ flowchart LR
   canonical entity.
 - **Models** (XGBoost / Poisson): match winner, team try rates, player try
   share; calibrated probabilities benchmarked against bookmaker closing odds.
+  Match-winner features cover Elo, form, rest, city-level travel, and lineup
+  availability from the official team lists; every prediction ships with its
+  SHAP factors, rendered as a "why this price" panel on the match page.
+- **Team lists**: officially named lineups ingested from NRL.com each week;
+  predictions regenerate append-only when a projected lineup is superseded
+  by the official one — the win probability sharpens too, since lineup
+  availability is a model feature.
 - **Odds ingestion**: The Odds API (free tier, 11 Australian bookmakers),
   polled into timestamped raw snapshots and replayed into `odds_snapshots`;
   aussportsbetting.com closing odds for the historical benchmark. (TAB and
   Betfair AU geo-block non-Australian IPs; polling them directly is a
   deployment-time option from an AU host.)
-- **Team lists**: officially named lineups ingested from NRL.com each week;
-  try-scorer predictions regenerate append-only when a projected lineup is
-  superseded by the official one.
 - **Serving**: FastAPI reads precomputed rows from `predictions`; Next.js
   frontend on Vercel. Weekly refresh via GitHub Actions.
 

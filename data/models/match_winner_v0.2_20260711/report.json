@@ -1,0 +1,128 @@
+{
+  "model_version": "match_winner_v0.2_20260711",
+  "splits": {
+    "train": [
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021
+    ],
+    "val": [
+      2022,
+      2023
+    ],
+    "test": [
+      2024,
+      2025,
+      2026
+    ]
+  },
+  "best_iteration": 244,
+  "test_all": {
+    "model_raw": {
+      "log_loss": 0.6472222805023193,
+      "brier": 0.2271164506673813,
+      "accuracy": 0.644524236983842,
+      "n": 557
+    },
+    "model_calibrated": {
+      "log_loss": 0.6454125046730042,
+      "brier": 0.22648535668849945,
+      "accuracy": 0.6499102333931778,
+      "n": 557
+    },
+    "elo_only": {
+      "log_loss": 0.6532730212736596,
+      "brier": 0.23044420877501923,
+      "accuracy": 0.6247755834829444,
+      "n": 557
+    },
+    "always_home_0.58": {
+      "log_loss": 0.6820684416671886,
+      "brier": 0.24447829725553796,
+      "accuracy": 0.5763016157989228,
+      "n": 557
+    }
+  },
+  "test_with_market_odds": {
+    "n": 557,
+    "model_calibrated": {
+      "log_loss": 0.6454125046730042,
+      "brier": 0.22648535668849945,
+      "accuracy": 0.6499102333931778,
+      "n": 557
+    },
+    "market_closing": {
+      "log_loss": 0.6453946725539256,
+      "brier": 0.22615749287377732,
+      "accuracy": 0.6283662477558348,
+      "n": 557
+    }
+  },
+  "calibration_test": [
+    {
+      "bin": "0.2-0.3",
+      "n": 49,
+      "predicted": 0.24639683961868286,
+      "actual": 0.32653061224489793
+    },
+    {
+      "bin": "0.3-0.4",
+      "n": 44,
+      "predicted": 0.35432514548301697,
+      "actual": 0.5227272727272727
+    },
+    {
+      "bin": "0.4-0.5",
+      "n": 70,
+      "predicted": 0.45576223731040955,
+      "actual": 0.32857142857142857
+    },
+    {
+      "bin": "0.5-0.6",
+      "n": 98,
+      "predicted": 0.5523609519004822,
+      "actual": 0.5306122448979592
+    },
+    {
+      "bin": "0.6-0.7",
+      "n": 132,
+      "predicted": 0.652766764163971,
+      "actual": 0.6893939393939394
+    },
+    {
+      "bin": "0.7-0.8",
+      "n": 114,
+      "predicted": 0.7483389377593994,
+      "actual": 0.6842105263157895
+    },
+    {
+      "bin": "0.8-0.9",
+      "n": 44,
+      "predicted": 0.8188770413398743,
+      "actual": 0.8181818181818182
+    }
+  ],
+  "feature_importance_gain": {
+    "elo_expected_home": 14.3,
+    "elo_diff": 11.5,
+    "season_win_rate_diff": 10.08,
+    "margin_10_diff": 7.05,
+    "regulars_available_diff": 5.57,
+    "points_against_5_diff": 5.44,
+    "margin_5_diff": 5.22,
+    "win_rate_5_diff": 4.23,
+    "rest_days_diff": 3.88,
+    "round_number": 3.77,
+    "win_rate_10_diff": 3.73,
+    "points_for_5_diff": 3.54,
+    "returning_share_diff": 3.42,
+    "travel_km_diff": 3.09
+  },
+  "calibrator_platt": {
+    "coef": 0.9628403782844543,
+    "intercept": 0.10027393698692322
+  }
+}

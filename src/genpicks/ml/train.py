@@ -215,7 +215,7 @@ def main(argv: list[str] | None = None) -> None:
     y_market = with_market["home_win"].to_numpy()
 
     report = {
-        "model_version": f"match_winner_v0.1_{date.today():%Y%m%d}",
+        "model_version": f"match_winner_v0.2_{date.today():%Y%m%d}",
         "splits": {k: sorted(int(s) for s in v["season"].unique()) for k, v in splits.items()},
         "best_iteration": fold["best_iteration"],
         "test_all": {
