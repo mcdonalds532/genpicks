@@ -25,9 +25,21 @@ from genpicks.scrape.rlp import SOURCE, MatchDetail, SeasonMatchRow
 logger = logging.getLogger(__name__)
 
 
-def load_season_rows(session: Session, rows: list[SeasonMatchRow]) -> dict[str, Match]:
+def load_season_rows(
+    session: Session, rows: list[SeasonMatchRow], resolver: Resolver | None = None
+) -> dict[str, Match]:
     """Upsert one season's matches; returns matches keyed by source_key."""
-    resolver = Resolver(session, SOURCE)
+    resolver = resolver if resolver is not None else Resolver(session, SOURCE)
+    # one round trip for the whole season instead of one per match
+    existing = {
+        match.source_key: match
+        for match in session.scalars(
+            select(Match).where(
+                Match.source == SOURCE,
+                Match.source_key.in_([row.source_key for row in rows]),
+            )
+        )
+    }
     loaded: dict[str, Match] = {}
     for row in rows:
         # Resolve entities before creating the Match: resolver queries
@@ -37,9 +49,7 @@ def load_season_rows(session: Session, rows: list[SeasonMatchRow]) -> dict[str, 
         away_team_id = resolver.team(row.away_slug, row.away_name).id
         venue_id = resolver.venue(row.venue_id, row.venue_name).id if row.venue_id else None
 
-        match = session.scalar(
-            select(Match).where(Match.source == SOURCE, Match.source_key == row.source_key)
-        )
+        match = existing.get(row.source_key)
         if match is None:
             match = Match(source=SOURCE, source_key=row.source_key)
             session.add(match)
@@ -57,9 +67,20 @@ def load_season_rows(session: Session, rows: list[SeasonMatchRow]) -> dict[str, 
     return loaded
 
 
-def load_match_detail(session: Session, match: Match, detail: MatchDetail) -> int:
-    """Upsert per-player rows for one match; returns the number of rows."""
-    resolver = Resolver(session, SOURCE)
+def load_match_detail(
+    session: Session,
+    match: Match,
+    detail: MatchDetail,
+    resolver: Resolver | None = None,
+    existing_stats: dict[int, PlayerMatchStats] | None = None,
+) -> int:
+    """Upsert per-player rows for one match; returns the number of rows.
+
+    `resolver` and `existing_stats` (this match's stats rows keyed by
+    player_id) can be prefetched at season scope by the caller — a replay
+    against a remote database otherwise pays one round trip per appearance.
+    """
+    resolver = resolver if resolver is not None else Resolver(session, SOURCE)
     completed = (detail.status or "").lower() == "completed"
 
     if detail.venue_city and detail.venue_id is not None and match.venue_id is not None:
@@ -76,12 +97,16 @@ def load_match_detail(session: Session, match: Match, detail: MatchDetail) -> in
         if entry.stat == "Tries" and entry.count is not None:
             tries[entry.player_id] = tries.get(entry.player_id, 0) + entry.count
 
-    existing = {
-        stats.player_id: stats
-        for stats in session.scalars(
-            select(PlayerMatchStats).where(PlayerMatchStats.match_id == match.id)
-        )
-    }
+    existing = (
+        existing_stats
+        if existing_stats is not None
+        else {
+            stats.player_id: stats
+            for stats in session.scalars(
+                select(PlayerMatchStats).where(PlayerMatchStats.match_id == match.id)
+            )
+        }
+    )
 
     count = 0
     seen_player_ids: set[int] = set()
@@ -101,5 +126,6 @@ def load_match_detail(session: Session, match: Match, detail: MatchDetail) -> in
         stats.jersey_number = appearance.jersey
         stats.tries = tries.get(appearance.player_id, 0 if completed else None)
         count += 1
-    session.flush()
+    # no flush here: the caller commits per season, so unchanged matches
+    # cost nothing and new rows land in one executemany batch
     return count

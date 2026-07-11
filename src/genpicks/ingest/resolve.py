@@ -13,6 +13,8 @@ Alias choice per entity type:
 - teams: the source's slug, plus the short display name.
 """
 
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -59,6 +61,36 @@ class Resolver:
         self.session = session
         self.source = source
         self._cache: dict[tuple[type, str], int] = {}
+        self._complete = False
+        # the identity map holds weak references: without this list the
+        # primed entities are garbage-collected and session.get() pays a
+        # round trip again
+        self._pinned: list = []
+
+    def warm(self) -> "Resolver":
+        """Bulk-load every alias for this source, plus the entities they
+        point to, in six queries total.
+
+        A season replay then resolves from memory instead of paying one
+        round trip per alias — the difference between minutes and an hour
+        when the database is a ~200ms RTT away. After warming, the cache is
+        complete for this source: a miss means the alias does not exist, so
+        the per-miss existence checks are skipped too.
+        """
+        tables: list[tuple[type, Any, str]] = [
+            (Team, TeamAlias, "team_id"),
+            (Venue, VenueAlias, "venue_id"),
+            (Player, PlayerAlias, "player_id"),
+        ]
+        for entity_cls, alias_cls, fk_name in tables:
+            for alias_row in self.session.scalars(
+                select(alias_cls).where(alias_cls.source == self.source)
+            ):
+                self._cache[(entity_cls, alias_row.alias)] = getattr(alias_row, fk_name)
+            # prime the identity map so session.get() never hits the wire
+            self._pinned.extend(self.session.scalars(select(entity_cls)).all())
+        self._complete = True
+        return self
 
     def team(self, slug: str, display_name: str) -> Team:
         team = self._resolve(Team, TeamAlias, "team_id", slug)
@@ -108,6 +140,8 @@ class Resolver:
     def _resolve(self, entity_cls, alias_cls, fk_name: str, alias: str):
         key = (entity_cls, alias)
         if key not in self._cache:
+            if self._complete:  # warmed: a miss means the alias doesn't exist
+                return None
             row = self.session.scalar(
                 select(alias_cls).where(alias_cls.source == self.source, alias_cls.alias == alias)
             )
@@ -129,8 +163,12 @@ class Resolver:
         """Add the alias unless it already exists (pointing wherever it points)."""
         if (entity_cls, alias) in self._cache:
             return
-        existing = self.session.scalar(
-            select(alias_cls).where(alias_cls.source == self.source, alias_cls.alias == alias)
+        existing = (
+            None
+            if self._complete  # warmed: absence from the cache is authoritative
+            else self.session.scalar(
+                select(alias_cls).where(alias_cls.source == self.source, alias_cls.alias == alias)
+            )
         )
         if existing is None:
             self._record_alias(entity_cls, alias_cls, fk_name, entity_id, alias)

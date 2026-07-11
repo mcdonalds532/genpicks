@@ -62,7 +62,10 @@ flowchart LR
 
 - **Data pipeline** (Python): scrapers write raw payloads to `data/raw/`, an
   idempotent transform validates and loads them into the relational schema.
-  The clean database is always rebuildable from raw.
+  The clean database is always rebuildable from raw. Loaders prefetch their
+  lookup tables per season and skip no-op rewrites, so the weekly refresh
+  spends ~400 SQL statements, not ~19,000 — minutes instead of an hour
+  against a database an ocean away.
 - **Database** (PostgreSQL in production, SQLite for local dev): normalized
   schema in `src/genpicks/db/models.py`, migrations via Alembic. Teams,
   venues, and players each have alias tables so differently-named source

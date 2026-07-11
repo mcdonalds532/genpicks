@@ -4,7 +4,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.orm import Session
 
 from genpicks.db.models import (
@@ -43,6 +43,24 @@ def season_rows():
 def match_detail():
     html = (FIXTURES / "rlp-match-103171.html").read_text(encoding="utf-8")
     return rlp.parse_match(html, "103171")
+
+
+def test_warmed_resolver_resolves_from_memory_and_still_creates(session, season_rows):
+    load_season_rows(session, season_rows)
+    session.commit()
+
+    resolver = Resolver(session, "rlp").warm()
+    # existing alias: resolves without touching the wire
+    statements: list[str] = []
+    event.listen(session.bind, "before_cursor_execute", lambda *args: statements.append(args[2]))
+    team = resolver.team(season_rows[0].home_slug, season_rows[0].home_name)
+    assert team.id is not None
+    assert statements == []  # cache hit end to end
+    # a genuinely new alias still creates the entity and its alias row
+    new_team = resolver.team("expansion-bears-2030", "Bears")
+    session.commit()
+    assert new_team.id is not None
+    assert resolver.team("expansion-bears-2030", "Bears").id == new_team.id
 
 
 def test_season_load_is_idempotent(session, season_rows):

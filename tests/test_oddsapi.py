@@ -20,7 +20,7 @@ from genpicks.db.models import (
     Team,
     TeamAlias,
 )
-from genpicks.ingest.oddsapi_loader import _resolve_team, load_odds_events
+from genpicks.ingest.oddsapi_loader import OddsContext, _resolve_team, load_odds_events
 from genpicks.scrape import oddsapi
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -140,11 +140,13 @@ def test_reingesting_a_seen_snapshot_adds_nothing(session, events):
 
 
 def test_unknown_name_falls_back_to_nickname_containment(session, caplog):
-    team = _resolve_team(session, "The Dolphins")
+    ctx = OddsContext(session)
+    team = _resolve_team(session, ctx, "The Dolphins")
     assert team is not None and team.name == "Dolphins"
     # the exact string is now an alias, so next time it resolves silently
+    session.flush()
     alias = session.scalar(
         select(TeamAlias).where(TeamAlias.source == "oddsapi", TeamAlias.alias == "The Dolphins")
     )
     assert alias.team_id == team.id
-    assert _resolve_team(session, "Some Rugby Club") is None
+    assert _resolve_team(session, ctx, "Some Rugby Club") is None

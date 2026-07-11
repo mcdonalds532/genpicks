@@ -302,3 +302,15 @@ def test_nrl_ingest_is_idempotent(session_with_rlp_data, draw, vegas_detail):
         session.scalar(select(func.count()).select_from(MatchSourceKey)),
     )
     assert counts_first == counts_second
+
+
+def test_unchanged_try_events_are_not_rewritten(session_with_rlp_data, draw, vegas_detail):
+    # a weekly replay recomputes identical events for every settled match;
+    # a delete+reinsert would show up as fresh autoincrement ids
+    session, match = session_with_rlp_data
+    assert load_nrl_match(session, 2025, draw.fixtures[0], vegas_detail)
+    session.commit()
+    ids_first = session.scalars(select(TryEvent.id).order_by(TryEvent.id)).all()
+    assert load_nrl_match(session, 2025, draw.fixtures[0], vegas_detail)
+    session.commit()
+    assert session.scalars(select(TryEvent.id).order_by(TryEvent.id)).all() == ids_first

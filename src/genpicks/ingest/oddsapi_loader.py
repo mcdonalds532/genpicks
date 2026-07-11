@@ -17,9 +17,9 @@ Reconciliation:
 """
 
 import logging
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import exists, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from genpicks.db.models import (
@@ -70,30 +70,58 @@ ODDSAPI_NAME_TO_RLP_SLUG = {
 _NICKNAMES = sorted(NICKNAME_TO_RLP_SLUG, key=len, reverse=True)
 
 
+def _utc_key(value: datetime) -> datetime:
+    """Naive-UTC form for set membership: Postgres returns aware datetimes,
+    SQLite naive ones (written as UTC), and the two must compare equal."""
+    return value if value.tzinfo is None else value.astimezone(UTC).replace(tzinfo=None)
+
+
+class OddsContext:
+    """Run-scoped lookups: replaying a raw directory of N snapshots must not
+    pay one existence-check round trip per file."""
+
+    def __init__(self, session: Session) -> None:
+        self.seen_captured_at: set[datetime] = {
+            _utc_key(value)
+            for value in session.scalars(
+                select(OddsSnapshot.captured_at).where(OddsSnapshot.source == SOURCE).distinct()
+            )
+        }
+        self.team_alias: dict[str, int] = {}
+        self.rlp_team_alias: dict[str, int] = {}
+        for alias in session.scalars(
+            select(TeamAlias).where(TeamAlias.source.in_([SOURCE, RLP_SOURCE]))
+        ):
+            table = self.team_alias if alias.source == SOURCE else self.rlp_team_alias
+            table[alias.alias] = alias.team_id
+        self.match_key: dict[str, int] = {
+            key.source_key: key.match_id
+            for key in session.scalars(
+                select(MatchSourceKey).where(MatchSourceKey.source == SOURCE)
+            )
+        }
+        # identity-map priming (weak references — must stay pinned here)
+        self._teams: list[Team] = list(session.scalars(select(Team)))
+
+
 def load_odds_events(
-    session: Session, events: list[OddsEvent], captured_at
+    session: Session, events: list[OddsEvent], captured_at, ctx: OddsContext | None = None
 ) -> tuple[int, int, int]:
     """Returns (snapshot rows added, events matched, events unmatched)."""
-    already = session.scalar(
-        select(
-            exists().where(
-                OddsSnapshot.source == SOURCE,
-                OddsSnapshot.captured_at == captured_at,
-            )
-        )
-    )
-    if already:
+    ctx = ctx if ctx is not None else OddsContext(session)
+    if _utc_key(captured_at) in ctx.seen_captured_at:
         return 0, 0, 0
+    ctx.seen_captured_at.add(_utc_key(captured_at))
 
     rows = matched = unmatched = 0
     for event in events:
-        match = _resolve_match(session, event)
+        match = _resolve_match(session, ctx, event)
         if match is None:
             unmatched += 1
             continue
         matched += 1
         for price in event.prices:
-            team = _resolve_team(session, price.selection_name)
+            team = _resolve_team(session, ctx, price.selection_name)
             session.add(
                 OddsSnapshot(
                     source=SOURCE,
@@ -117,14 +145,12 @@ def load_odds_events(
     return rows, matched, unmatched
 
 
-def _resolve_team(session: Session, name: str) -> Team | None:
+def _resolve_team(session: Session, ctx: OddsContext, name: str) -> Team | None:
     if name == "Draw":
         return None  # a real selection, priced, but not a team
-    existing = session.scalar(
-        select(TeamAlias).where(TeamAlias.source == SOURCE, TeamAlias.alias == name)
-    )
-    if existing is not None:
-        return session.get(Team, existing.team_id)
+    team_id = ctx.team_alias.get(name)
+    if team_id is not None:
+        return session.get(Team, team_id)
 
     slug = ODDSAPI_NAME_TO_RLP_SLUG.get(name)
     if slug is None:
@@ -140,32 +166,25 @@ def _resolve_team(session: Session, name: str) -> Team | None:
     if slug is None:
         logger.warning("no mapping for oddsapi team %r", name)
         return None
-    rlp_alias = session.scalar(
-        select(TeamAlias).where(TeamAlias.source == RLP_SOURCE, TeamAlias.alias == slug)
-    )
-    if rlp_alias is None:
+    team_id = ctx.rlp_team_alias.get(slug)
+    if team_id is None:
         logger.warning("team %r not ingested from RLP yet", slug)
         return None
-    session.add(TeamAlias(team_id=rlp_alias.team_id, alias=name, source=SOURCE))
-    session.flush()
-    return session.get(Team, rlp_alias.team_id)
+    session.add(TeamAlias(team_id=team_id, alias=name, source=SOURCE))
+    ctx.team_alias[name] = team_id
+    return session.get(Team, team_id)
 
 
-def _resolve_match(session: Session, event: OddsEvent) -> Match | None:
-    known = session.scalar(
-        select(MatchSourceKey).where(
-            MatchSourceKey.source == SOURCE,
-            MatchSourceKey.source_key == event.event_id,
-        )
-    )
+def _resolve_match(session: Session, ctx: OddsContext, event: OddsEvent) -> Match | None:
+    known = ctx.match_key.get(event.event_id)
     if known is not None:
-        return session.get(Match, known.match_id)
+        return session.get(Match, known)
     if event.commence_time is None:
         return None
     commence = event.commence_time
 
-    home = _resolve_team(session, event.home_team)
-    away = _resolve_team(session, event.away_team)
+    home = _resolve_team(session, ctx, event.home_team)
+    away = _resolve_team(session, ctx, event.away_team)
     if home is None or away is None:
         return None
 
@@ -195,5 +214,5 @@ def _resolve_match(session: Session, event: OddsEvent) -> Match | None:
         return None
     match = candidates[0]
     session.add(MatchSourceKey(match_id=match.id, source=SOURCE, source_key=event.event_id))
-    session.flush()
+    ctx.match_key[event.event_id] = match.id
     return match

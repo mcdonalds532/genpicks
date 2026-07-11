@@ -20,10 +20,11 @@ on:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    # Generous: the runner is US-based and the database is in Sydney, so
-    # row-by-row ingest pays ~200ms RTT per statement. Twice-weekly batch —
-    # slow is acceptable. (Batching the loaders would cut this a lot.)
-    timeout-minutes: 150
+    # The runner is US-based and the database is in Sydney (~200ms RTT).
+    # Loaders prefetch their lookups per season, so a steady-state ingest is
+    # a few hundred statements (~2 min); the timeout headroom covers cold
+    # raw caches and scraping, not the database.
+    timeout-minutes: 60
     env:
       GENPICKS_DATABASE_URL: ${{ secrets.GENPICKS_DATABASE_URL }}
       GENPICKS_ODDS_API_KEY: ${{ secrets.GENPICKS_ODDS_API_KEY }}
