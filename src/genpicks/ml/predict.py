@@ -40,6 +40,7 @@ from genpicks.db.models import (
     Prediction,
     TeamListEntry,
 )
+from genpicks.ml.explain import build_explanation
 from genpicks.ml.features import FEATURE_COLUMNS, build_match_dataset
 from genpicks.ml.tries import (
     TEAM_FEATURES,
@@ -71,9 +72,14 @@ def predict_h2h(session, engine, models_root: Path, upcoming_ids: set[int]) -> i
     rows = data[data["match_id"].isin(upcoming_ids)]
     if rows.empty:
         return 0
-    raw = booster.predict(
-        xgb.DMatrix(rows[FEATURE_COLUMNS].astype(float), feature_names=FEATURE_COLUMNS)
+    dmatrix = xgb.DMatrix(
+        rows[FEATURE_COLUMNS].astype(float), feature_names=FEATURE_COLUMNS
     )
+    # score at the report's best iteration — the published backtest replays
+    # the artifact this way, and serving must be the same model it audits
+    iteration_range = (0, report["best_iteration"] + 1)
+    raw = booster.predict(dmatrix, iteration_range=iteration_range)
+    contribs = booster.predict(dmatrix, pred_contribs=True, iteration_range=iteration_range)
     logit = np.log(np.clip(raw, 1e-6, 1 - 1e-6) / (1 - np.clip(raw, 1e-6, 1 - 1e-6)))
     prob_home = 1.0 / (1.0 + np.exp(-(platt["coef"] * logit + platt["intercept"])))
 
@@ -84,7 +90,9 @@ def predict_h2h(session, engine, models_root: Path, upcoming_ids: set[int]) -> i
     official = official_lineups(session, upcoming_ids)
     now = datetime.now(UTC)
     written = {"official": 0, "projected": 0}
-    for row, p in zip(rows.itertuples(), prob_home, strict=True):
+    for (row, p), contrib in zip(
+        zip(rows.itertuples(), prob_home, strict=True), contribs, strict=True
+    ):
         basis = (
             "official"
             if (row.match_id, row.home_team_id) in official
@@ -93,6 +101,7 @@ def predict_h2h(session, engine, models_root: Path, upcoming_ids: set[int]) -> i
         )
         if newest.get(row.match_id) in (basis, "official"):
             continue
+        explanation = build_explanation(FEATURE_COLUMNS, contrib)
         for team_id, prob in ((row.home_team_id, float(p)), (row.away_team_id, float(1 - p))):
             session.add(
                 Prediction(
@@ -103,6 +112,8 @@ def predict_h2h(session, engine, models_root: Path, upcoming_ids: set[int]) -> i
                     probability=prob,
                     generated_at=now,
                     lineup_source=basis,
+                    # home row only: the away side is its mirror image
+                    explanation=explanation if team_id == row.home_team_id else None,
                 )
             )
         written[basis] += 1
@@ -173,7 +184,8 @@ def predict_tries(session, engine, models_root: Path, upcoming_ids: set[int]) ->
     if team_rows.empty:
         return 0
     team_rows["lam"] = booster.predict(
-        xgb.DMatrix(team_rows[TEAM_FEATURES].astype(float), feature_names=TEAM_FEATURES)
+        xgb.DMatrix(team_rows[TEAM_FEATURES].astype(float), feature_names=TEAM_FEATURES),
+        iteration_range=(0, report["best_iteration"] + 1),
     )
 
     priors, fallback = position_priors(

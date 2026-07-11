@@ -203,6 +203,7 @@ def main(argv: list[str] | None = None) -> None:
 
     report = {
         "model_version": f"try_scorer_v0.1_{date.today():%Y%m%d}",
+        "best_iteration": int(booster.best_iteration),
         "splits": {
             "train": sorted(train_seasons),
             "val": sorted(val_seasons),

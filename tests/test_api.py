@@ -126,6 +126,23 @@ def client():
                     team_id=2,
                     probability=0.55,
                     generated_at=now,
+                    explanation={
+                        "factors": [
+                            {
+                                "factor": "strength",
+                                "label": "Team strength",
+                                "logit": 0.4,
+                                "share": 0.8,
+                            },
+                            {
+                                "factor": "rest",
+                                "label": "Rest advantage",
+                                "logit": -0.1,
+                                "share": 0.2,
+                            },
+                        ],
+                        "bias": 0.33,
+                    },
                 ),
                 Prediction(
                     model_version="v_test",
@@ -283,6 +300,15 @@ def test_match_markets_serve_newest_generation_only(client):
     assert [e["probability"] for e in body["first_try"]] == [0.1]
     assert body["lineup_source"] == "official"
     assert client.get("/matches/999/markets").status_code == 404
+
+
+def test_match_markets_include_h2h_explanation_from_home_row(client):
+    body = client.get("/matches/2/markets").json()
+    factors = body["h2h_explanation"]["factors"]
+    assert [f["factor"] for f in factors] == ["strength", "rest"]
+    assert factors[0]["logit"] == 0.4
+    # match 1's h2h rows predate explanations: the field degrades to null
+    assert client.get("/matches/1/markets").json()["h2h_explanation"] is None
 
 
 def test_try_markets_locked_without_entitled_viewer(client):

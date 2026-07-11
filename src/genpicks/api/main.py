@@ -281,6 +281,11 @@ def match_markets(
             }
             for p in h2h
         },
+        # grouped SHAP factors from the newest h2h generation (home row);
+        # positive logit leans home, negative leans away
+        "h2h_explanation": next(
+            (p.explanation for p in h2h if p.team_id == match.home_team_id), None
+        ),
         "anytime_try": None if locked else anytime,
         "first_try": None if locked else first,
         "try_markets_locked": locked,

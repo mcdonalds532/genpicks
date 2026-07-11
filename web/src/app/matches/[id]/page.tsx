@@ -9,6 +9,7 @@ import {
   type MatchMarkets,
   type PlayerMarketEntry,
 } from "@/lib/api";
+import { FactorBars } from "@/components/factor-bars";
 import { MarketOddsLine } from "@/components/market-odds";
 import { ProbBar } from "@/components/prob-bar";
 
@@ -194,6 +195,15 @@ export default async function MatchPage({
           <MarketOddsLine odds={markets.market_odds} />
         </div>
       </div>
+      {markets.h2h_explanation !== null && (
+        <div className="mb-6">
+          <FactorBars
+            explanation={markets.h2h_explanation}
+            homeTeam={markets.home_team}
+            awayTeam={markets.away_team}
+          />
+        </div>
+      )}
       {markets.try_markets_locked ? (
         <LockedMarkets
           markets={markets}

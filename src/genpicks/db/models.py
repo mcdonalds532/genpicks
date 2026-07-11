@@ -311,3 +311,8 @@ class Prediction(Base):
     # never updating — once the official list arrives; readers take the
     # newest generation.
     lineup_source: Mapped[str | None] = mapped_column(String(20))
+    # SHAP contributions grouped into named factors, stored on the h2h
+    # home-team row only (the away side is its mirror image); see
+    # ml/explain.py for the payload shape. Persisted at generation time
+    # because the API never computes on request.
+    explanation: Mapped[dict | None] = mapped_column(JSON)

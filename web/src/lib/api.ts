@@ -38,12 +38,22 @@ export type PlayerMarketEntry = {
   implied_odds: number | null;
 };
 
+// Grouped SHAP contributions from the h2h model, in log-odds space:
+// positive logit pulls toward the home side, negative toward the away
+// side; share is the factor's fraction of the total absolute pull.
+export type H2hExplanation = {
+  factors: { factor: string; label: string; logit: number; share: number }[];
+  bias: number;
+};
+
 export type MatchMarkets = {
   match_id: number;
   home_team: string | null;
   away_team: string | null;
   date: string | null;
   h2h: { home?: WinProbability; away?: WinProbability };
+  // null on matches predicted before explanations shipped
+  h2h_explanation: H2hExplanation | null;
   // null when locked: the API withholds try markets unless the request
   // proves an entitled viewer (internal key + subscribed user id)
   anytime_try: PlayerMarketEntry[] | null;
