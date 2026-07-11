@@ -13,9 +13,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-USER_AGENT = (
-    "GenPicksBot/0.1 (portfolio project; contact: sli0433722618@gmail.com)"
-)
+USER_AGENT = "GenPicksBot/0.1 (portfolio project; contact: sli0433722618@gmail.com)"
 
 RETRIABLE_STATUS = {429, 500, 502, 503, 504}
 

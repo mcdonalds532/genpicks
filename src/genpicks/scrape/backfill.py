@@ -15,7 +15,7 @@ pages per source) takes a bit over an hour of network time on the first run.
 
 import argparse
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from genpicks.config import get_settings
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 def parse_seasons(spec: str) -> list[int]:
-    """"2016-2025" or "2019" or "2019,2021" -> list of years."""
+    """ "2016-2025" or "2019" or "2019,2021" -> list of years."""
     seasons: list[int] = []
     for part in spec.split(","):
         part = part.strip()
@@ -119,9 +119,7 @@ def backfill_nrl_teamlists(
     """
     draw_dir = fetcher.raw_root / f"nrl/draws/{season}"
     if not draw_dir.exists():
-        logger.warning(
-            "season %d: no cached draw files — run the nrl backfill first", season
-        )
+        logger.warning("season %d: no cached draw files — run the nrl backfill first", season)
         return 0, 0
 
     pending_rounds = []
@@ -130,7 +128,7 @@ def backfill_nrl_teamlists(
         if any(not f.is_played for f in page.fixtures):
             pending_rounds.append(int(draw_file.stem.split("-")[1]))
 
-    horizon = datetime.now(timezone.utc) + timedelta(days=horizon_days)
+    horizon = datetime.now(UTC) + timedelta(days=horizon_days)
     upcoming = fetched = 0
     for round_number in pending_rounds:
         page = nrl.parse_draw(
@@ -143,9 +141,7 @@ def backfill_nrl_teamlists(
         in_horizon = [
             f
             for f in page.fixtures
-            if f.match_mode == "Pre"
-            and f.kickoff_utc is not None
-            and f.kickoff_utc <= horizon
+            if f.match_mode == "Pre" and f.kickoff_utc is not None and f.kickoff_utc <= horizon
         ]
         upcoming += len(in_horizon)
         if not in_horizon:
@@ -162,29 +158,32 @@ def backfill_nrl_teamlists(
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", choices=("rlp", "nrl", "nrl-teamlists", "oddsapi"),
-                        default="rlp")
-    parser.add_argument("--seasons", default=None,
-                        help='e.g. "2016-2025" or "2025" (not used by oddsapi)')
+    parser.add_argument(
+        "--source", choices=("rlp", "nrl", "nrl-teamlists", "oddsapi"), default="rlp"
+    )
+    parser.add_argument(
+        "--seasons", default=None, help='e.g. "2016-2025" or "2025" (not used by oddsapi)'
+    )
     parser.add_argument("--raw-root", type=Path, default=Path("data/raw"))
-    parser.add_argument("--skip-matches", action="store_true",
-                        help="only fetch season/draw pages")
-    parser.add_argument("--limit", type=int, default=None,
-                        help="max match pages per season (smoke tests)")
-    parser.add_argument("--force", action="store_true",
-                        help="refetch even if cached")
+    parser.add_argument("--skip-matches", action="store_true", help="only fetch season/draw pages")
+    parser.add_argument(
+        "--limit", type=int, default=None, help="max match pages per season (smoke tests)"
+    )
+    parser.add_argument("--force", action="store_true", help="refetch even if cached")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     if args.source == "oddsapi":
         api_key = get_settings().odds_api_key
         if not api_key:
-            parser.error(
-                "set GENPICKS_ODDS_API_KEY (free key from the-odds-api.com)"
-            )
+            parser.error("set GENPICKS_ODDS_API_KEY (free key from the-odds-api.com)")
         target, events, remaining = oddsapi.poll(api_key, args.raw_root)
-        logger.info("odds snapshot: %d events -> %s (%s credits left this month)",
-                    events, target, remaining if remaining is not None else "?")
+        logger.info(
+            "odds snapshot: %d events -> %s (%s credits left this month)",
+            events,
+            target,
+            remaining if remaining is not None else "?",
+        )
         return
     if args.seasons is None:
         parser.error(f"--seasons is required for --source {args.source}")
@@ -192,8 +191,9 @@ def main(argv: list[str] | None = None) -> None:
         fetcher = Fetcher(args.raw_root, headers=nrl.JSON_HEADERS)
         for season in parse_seasons(args.seasons):
             upcoming, fetched = backfill_nrl_teamlists(fetcher, season)
-            logger.info("season %d: team lists for %d/%d upcoming fixtures",
-                        season, fetched, upcoming)
+            logger.info(
+                "season %d: team lists for %d/%d upcoming fixtures", season, fetched, upcoming
+            )
         return
     if args.source == "nrl":
         fetcher = Fetcher(args.raw_root, headers=nrl.JSON_HEADERS)
@@ -209,8 +209,7 @@ def main(argv: list[str] | None = None) -> None:
             limit=args.limit,
             force=args.force,
         )
-        logger.info("season %d done: %d/%d match pages in raw store",
-                    season, fetched, total)
+        logger.info("season %d done: %d/%d match pages in raw store", season, fetched, total)
 
 
 if __name__ == "__main__":

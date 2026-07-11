@@ -1,5 +1,7 @@
 # GenPicks
 
+[![CI](https://github.com/mcdonalds532/genpicks/actions/workflows/ci.yml/badge.svg)](https://github.com/mcdonalds532/genpicks/actions/workflows/ci.yml)
+
 Machine-learning predictions for NRL matches: win probabilities, anytime
 try-scorer and first try-scorer probabilities per player, converted to implied
 betting odds and compared against live market prices.

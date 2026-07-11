@@ -22,29 +22,77 @@ from genpicks.scrape import asb, rlp
 FIXTURES = Path(__file__).parent / "fixtures"
 
 HEADER = [
-    "Date", "Kick-off (local)", "Home Team", "Away Team", "Venue",
-    "Home Score", "Away Score", "Play Off Game?", "Over Time?",
-    "Home Odds", "Draw Odds", "Away Odds", "Bookmakers Surveyed",
-    "Home Odds Open", "Home Odds Min", "Home Odds Max", "Home Odds Close",
-    "Away Odds Open", "Away Odds Min", "Away Odds Max", "Away Odds Close",
+    "Date",
+    "Kick-off (local)",
+    "Home Team",
+    "Away Team",
+    "Venue",
+    "Home Score",
+    "Away Score",
+    "Play Off Game?",
+    "Over Time?",
+    "Home Odds",
+    "Draw Odds",
+    "Away Odds",
+    "Bookmakers Surveyed",
+    "Home Odds Open",
+    "Home Odds Min",
+    "Home Odds Max",
+    "Home Odds Close",
+    "Away Odds Open",
+    "Away Odds Min",
+    "Away Odds Max",
+    "Away Odds Close",
     "Notes",
 ]
 
 VEGAS_ROW = [
-    datetime(2025, 3, 2), time(11, 0), "Canberra Raiders", "New Zealand Warriors",
-    "Allegiant Stadium", 30, 8, None, None,
-    2.32, 21.0, 1.62, 11,
-    2.40, 2.25, 2.45, 2.30,
-    1.55, 1.55, 1.66, 1.63,
+    datetime(2025, 3, 2),
+    time(11, 0),
+    "Canberra Raiders",
+    "New Zealand Warriors",
+    "Allegiant Stadium",
+    30,
+    8,
+    None,
+    None,
+    2.32,
+    21.0,
+    1.62,
+    11,
+    2.40,
+    2.25,
+    2.45,
+    2.30,
+    1.55,
+    1.55,
+    1.66,
+    1.63,
     None,
 ]
 
 UNKNOWN_ROW = [
-    datetime(2025, 3, 2), time(14, 0), "Canberra Raiders", "New Zealand Warriors",
-    "Somewhere", 0, 0, None, None,
-    2.0, 21.0, 2.0, 11,
-    2.0, 2.0, 2.0, 2.0,
-    2.0, 2.0, 2.0, 2.0,
+    datetime(2025, 3, 2),
+    time(14, 0),
+    "Canberra Raiders",
+    "New Zealand Warriors",
+    "Somewhere",
+    0,
+    0,
+    None,
+    None,
+    2.0,
+    21.0,
+    2.0,
+    11,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
     None,
 ]
 
@@ -93,9 +141,7 @@ def test_odds_attach_to_canonical_match(workbook_path):
         assert (loaded, unmatched) == (1, 0)  # 2015 row filtered by season
 
         snapshots = list(
-            session.scalars(
-                select(OddsSnapshot).where(OddsSnapshot.match_id == vegas.id)
-            )
+            session.scalars(select(OddsSnapshot).where(OddsSnapshot.match_id == vegas.id))
         )
         by_selection = {s.selection_name: s for s in snapshots}
         assert float(by_selection["Canberra Raiders"].price_decimal) == 2.30

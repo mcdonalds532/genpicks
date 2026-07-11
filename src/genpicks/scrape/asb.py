@@ -14,6 +14,7 @@ citing when benchmarking the model against these closes.
 
 from dataclasses import dataclass
 from datetime import date, datetime, time
+from functools import partial
 from pathlib import Path
 
 import openpyxl
@@ -47,11 +48,15 @@ def parse_workbook(path: Path) -> list[AsbMatchOdds]:
     header = next(rows)
     columns = {name: i for i, name in enumerate(header) if name}
 
+    def cell(row, name):
+        idx = columns.get(name)
+        return row[idx] if idx is not None else None
+
     parsed = []
     for row in rows:
         if row[columns["Date"]] is None or row[columns["Home Team"]] is None:
             continue
-        get = lambda name: row[idx] if (idx := columns.get(name)) is not None else None
+        get = partial(cell, row)
         parsed.append(
             AsbMatchOdds(
                 date=get("Date").date(),
@@ -67,11 +72,7 @@ def parse_workbook(path: Path) -> list[AsbMatchOdds]:
                 home_odds_avg=_number(get("Home Odds")),
                 away_odds_avg=_number(get("Away Odds")),
                 draw_odds_avg=_number(get("Draw Odds")),
-                raw={
-                    name: _json_safe(row[i])
-                    for name, i in columns.items()
-                    if row[i] is not None
-                },
+                raw={name: _json_safe(row[i]) for name, i in columns.items() if row[i] is not None},
             )
         )
     workbook.close()

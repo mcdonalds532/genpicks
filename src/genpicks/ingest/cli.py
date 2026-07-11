@@ -21,12 +21,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from genpicks.config import get_settings
-from genpicks.scrape import asb, nrl, oddsapi, rlp
-from genpicks.scrape.backfill import parse_seasons
 from genpicks.ingest.asb_loader import load_asb_odds
 from genpicks.ingest.nrl_loader import load_nrl_match, load_team_list
 from genpicks.ingest.oddsapi_loader import load_odds_events
 from genpicks.ingest.rlp_loader import load_match_detail, load_season_rows
+from genpicks.scrape import asb, nrl, oddsapi, rlp
+from genpicks.scrape.backfill import parse_seasons
 
 logger = logging.getLogger(__name__)
 
@@ -53,9 +53,7 @@ def ingest_season(session: Session, raw_root: Path, season: int) -> tuple[int, i
     return len(matches), ingested, missing
 
 
-def ingest_nrl_season(
-    session: Session, raw_root: Path, season: int
-) -> tuple[int, int, int]:
+def ingest_nrl_season(session: Session, raw_root: Path, season: int) -> tuple[int, int, int]:
     """Returns (fixtures attached, skipped/unreconciled, not yet downloaded)."""
     draw_dir = raw_root / f"nrl/draws/{season}"
     if not draw_dir.exists():
@@ -80,9 +78,7 @@ def ingest_nrl_season(
     return attached, skipped, missing
 
 
-def ingest_nrl_teamlists(
-    session: Session, raw_root: Path, season: int
-) -> tuple[int, int]:
+def ingest_nrl_teamlists(session: Session, raw_root: Path, season: int) -> tuple[int, int]:
     """Returns (team lists loaded, skipped/unreconciled)."""
     draw_dir = raw_root / f"nrl/draws/{season}"
     if not draw_dir.exists():
@@ -95,9 +91,7 @@ def ingest_nrl_teamlists(
         for fixture in page.fixtures:
             if fixture.is_played:
                 continue
-            teamlist_file = raw_root / nrl.teamlist_cache_path(
-                fixture.match_centre_path
-            )
+            teamlist_file = raw_root / nrl.teamlist_cache_path(fixture.match_centre_path)
             if not teamlist_file.exists():
                 continue
             detail = nrl.parse_match(teamlist_file.read_text(encoding="utf-8"))
@@ -125,14 +119,14 @@ def ingest_oddsapi(session: Session, raw_root: Path) -> tuple[int, int, int]:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source",
-                        choices=("rlp", "nrl", "nrl-teamlists", "asb", "oddsapi"),
-                        default="rlp")
-    parser.add_argument("--seasons", default=None,
-                        help='e.g. "2016-2026" (not used by oddsapi)')
+    parser.add_argument(
+        "--source", choices=("rlp", "nrl", "nrl-teamlists", "asb", "oddsapi"), default="rlp"
+    )
+    parser.add_argument("--seasons", default=None, help='e.g. "2016-2026" (not used by oddsapi)')
     parser.add_argument("--raw-root", type=Path, default=Path("data/raw"))
-    parser.add_argument("--database-url", default=None,
-                        help="defaults to GENPICKS_DATABASE_URL / settings")
+    parser.add_argument(
+        "--database-url", default=None, help="defaults to GENPICKS_DATABASE_URL / settings"
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -141,8 +135,12 @@ def main(argv: list[str] | None = None) -> None:
         if args.source == "oddsapi":
             rows, matched, unmatched = ingest_oddsapi(session, args.raw_root)
             session.commit()
-            logger.info("oddsapi: %d snapshot rows added (%d events matched, "
-                        "%d unmatched)", rows, matched, unmatched)
+            logger.info(
+                "oddsapi: %d snapshot rows added (%d events matched, %d unmatched)",
+                rows,
+                matched,
+                unmatched,
+            )
             return
         if args.seasons is None:
             parser.error(f"--seasons is required for --source {args.source}")
@@ -154,37 +152,36 @@ def main(argv: list[str] | None = None) -> None:
                     "https://www.aussportsbetting.com/historical_data/nrl.xlsx "
                     "in a browser and save it there"
                 )
-            rows = asb.parse_workbook(workbook)
-            loaded, unmatched = load_asb_odds(
-                session, rows, set(parse_seasons(args.seasons))
-            )
+            odds_rows = asb.parse_workbook(workbook)
+            loaded, unmatched = load_asb_odds(session, odds_rows, set(parse_seasons(args.seasons)))
             session.commit()
-            logger.info("asb: odds for %d matches loaded, %d rows unmatched",
-                        loaded, unmatched)
+            logger.info("asb: odds for %d matches loaded, %d rows unmatched", loaded, unmatched)
             return
         for season in parse_seasons(args.seasons):
             if args.source == "nrl-teamlists":
                 loaded, skipped = ingest_nrl_teamlists(session, args.raw_root, season)
                 session.commit()
-                logger.info("season %d: %d team lists loaded, %d skipped",
-                            season, loaded, skipped)
+                logger.info("season %d: %d team lists loaded, %d skipped", season, loaded, skipped)
             elif args.source == "nrl":
-                attached, skipped, missing = ingest_nrl_season(
-                    session, args.raw_root, season
-                )
+                attached, skipped, missing = ingest_nrl_season(session, args.raw_root, season)
                 session.commit()
                 logger.info(
                     "season %d: %d NRL matches attached, %d unreconciled, %d not yet downloaded",
-                    season, attached, skipped, missing,
+                    season,
+                    attached,
+                    skipped,
+                    missing,
                 )
             else:
-                upserted, ingested, missing = ingest_season(
-                    session, args.raw_root, season
-                )
+                upserted, ingested, missing = ingest_season(session, args.raw_root, season)
                 session.commit()
                 logger.info(
-                    "season %d: %d matches upserted, %d detail pages ingested, %d not yet downloaded",
-                    season, upserted, ingested, missing,
+                    "season %d: %d matches upserted, %d detail pages ingested,"
+                    " %d not yet downloaded",
+                    season,
+                    upserted,
+                    ingested,
+                    missing,
                 )
 
 

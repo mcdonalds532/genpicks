@@ -1,6 +1,6 @@
 """Lineup selection for serving: official team lists vs projection."""
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy import create_engine
@@ -16,7 +16,7 @@ from genpicks.db.models import (
 )
 from genpicks.ml.predict import newest_try_generation, official_lineups
 
-NOW = datetime.now(timezone.utc)
+NOW = datetime.now(UTC)
 
 
 @pytest.fixture()
@@ -26,37 +26,46 @@ def session():
     with Session(engine) as session:
         session.add_all([Team(id=1, name="Alpha"), Team(id=2, name="Beta")])
         session.add(
-            Match(id=1, season=2026, round="19", match_date=date.today(),
-                  home_team_id=1, away_team_id=2, source="t", source_key="m1")
+            Match(
+                id=1,
+                season=2026,
+                round="19",
+                match_date=date.today(),
+                home_team_id=1,
+                away_team_id=2,
+                source="t",
+                source_key="m1",
+            )
         )
-        session.add_all(
-            Player(id=n, full_name=f"Player {n}") for n in range(1, 41)
-        )
+        session.add_all(Player(id=n, full_name=f"Player {n}") for n in range(1, 41))
         yield session
 
 
 def entry(match_id, team_id, player_id, jersey, position="Wing"):
     return TeamListEntry(
-        match_id=match_id, team_id=team_id, player_id=player_id,
-        player_name=f"Player {player_id or '?'}", position=position,
-        jersey_number=jersey, source="nrl", captured_at=NOW,
+        match_id=match_id,
+        team_id=team_id,
+        player_id=player_id,
+        player_name=f"Player {player_id or '?'}",
+        position=position,
+        jersey_number=jersey,
+        source="nrl",
+        captured_at=NOW,
     )
 
 
 def test_official_lineups_take_the_matchday_17_and_need_13_resolved(session):
     # team 1: full 17 named, plus cover (18, 20) and an unresolved debutant
+    session.add_all(entry(1, 1, player_id=n, jersey=n) for n in range(1, 18))
     session.add_all(
-        entry(1, 1, player_id=n, jersey=n) for n in range(1, 18)
+        [
+            entry(1, 1, player_id=18, jersey=18),  # 18th man: excluded
+            entry(1, 1, player_id=19, jersey=20),  # reserve: excluded
+            entry(1, 1, player_id=None, jersey=None),  # unresolved, unnumbered
+        ]
     )
-    session.add_all([
-        entry(1, 1, player_id=18, jersey=18),          # 18th man: excluded
-        entry(1, 1, player_id=19, jersey=20),          # reserve: excluded
-        entry(1, 1, player_id=None, jersey=None),      # unresolved, unnumbered
-    ])
     # team 2: only 5 of its names resolved -> not usable as a lineup
-    session.add_all(
-        entry(1, 2, player_id=20 + n, jersey=n) for n in range(1, 6)
-    )
+    session.add_all(entry(1, 2, player_id=20 + n, jersey=n) for n in range(1, 6))
     session.flush()
 
     lineups = official_lineups(session, {1})
@@ -66,15 +75,30 @@ def test_official_lineups_take_the_matchday_17_and_need_13_resolved(session):
 
 
 def test_newest_try_generation_reports_latest_lineup_source(session):
-    session.add_all([
-        Prediction(model_version="v", match_id=1, market="anytime_try",
-                   team_id=1, player_id=1, probability=0.4,
-                   generated_at=NOW - timedelta(hours=2),
-                   lineup_source="projected"),
-        Prediction(model_version="v", match_id=1, market="anytime_try",
-                   team_id=1, player_id=1, probability=0.5,
-                   generated_at=NOW, lineup_source="official"),
-    ])
+    session.add_all(
+        [
+            Prediction(
+                model_version="v",
+                match_id=1,
+                market="anytime_try",
+                team_id=1,
+                player_id=1,
+                probability=0.4,
+                generated_at=NOW - timedelta(hours=2),
+                lineup_source="projected",
+            ),
+            Prediction(
+                model_version="v",
+                match_id=1,
+                market="anytime_try",
+                team_id=1,
+                player_id=1,
+                probability=0.5,
+                generated_at=NOW,
+                lineup_source="official",
+            ),
+        ]
+    )
     session.flush()
 
     assert newest_try_generation(session, "v") == {1: "official"}

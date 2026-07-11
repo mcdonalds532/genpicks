@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from stripe.params import CustomerCreateParams
 
 from genpicks.api.deps import get_session, require_internal
 from genpicks.config import get_settings
@@ -49,12 +50,16 @@ def create_checkout(payload: CheckoutPayload, session: Session = Depends(get_ses
         raise HTTPException(404, "user not found")
 
     if user.stripe_customer_id is None:
-        customer = stripe.Customer.create(
-            api_key=settings.stripe_secret_key,
-            email=user.email,
-            name=user.name,
-            metadata={"genpicks_user_id": str(user.id)},
-        )
+        # GitHub may withhold email/name; Stripe rejects explicit None params
+        params: CustomerCreateParams = {
+            "api_key": settings.stripe_secret_key,
+            "metadata": {"genpicks_user_id": str(user.id)},
+        }
+        if user.email:
+            params["email"] = user.email
+        if user.name:
+            params["name"] = user.name
+        customer = stripe.Customer.create(**params)
         user.stripe_customer_id = customer.id
         session.commit()
 
@@ -82,7 +87,7 @@ async def stripe_webhook(request: Request, session: Session = Depends(get_sessio
             settings.stripe_webhook_secret,
         )
     except (stripe.SignatureVerificationError, ValueError):
-        raise HTTPException(400, "invalid signature")
+        raise HTTPException(400, "invalid signature") from None
 
     obj = event["data"]["object"]
     if event["type"] == "checkout.session.completed":
@@ -97,14 +102,10 @@ async def stripe_webhook(request: Request, session: Session = Depends(get_sessio
         "customer.subscription.deleted",
     ):
         # later lifecycle changes only carry the customer id
-        user = session.scalar(
-            select(User).where(User.stripe_customer_id == obj["customer"])
-        )
+        user = session.scalar(select(User).where(User.stripe_customer_id == obj["customer"]))
         if user is not None:
             user.subscription_status = (
-                "canceled"
-                if event["type"] == "customer.subscription.deleted"
-                else obj["status"]
+                "canceled" if event["type"] == "customer.subscription.deleted" else obj["status"]
             )
             session.commit()
     else:

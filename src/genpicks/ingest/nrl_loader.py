@@ -21,7 +21,7 @@ Reconciliation:
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -171,7 +171,9 @@ def _timeline_reconciles(
         logger.warning(
             "match %s: timeline tries %s disagree with RLP %s — keeping RLP counts, "
             "skipping try order",
-            match.source_key, timeline_totals, rlp_totals,
+            match.source_key,
+            timeline_totals,
+            rlp_totals,
         )
         return False
     return True
@@ -240,8 +242,7 @@ def _resolve_match(
             for m in found
             if kickoff is None
             or (
-                m.match_date is not None
-                and abs(m.match_date - kickoff.date()) <= timedelta(days=1)
+                m.match_date is not None and abs(m.match_date - kickoff.date()) <= timedelta(days=1)
             )
         ]
 
@@ -267,9 +268,7 @@ def _resolve_match(
         return None
 
     match = candidates[0]
-    session.add(
-        MatchSourceKey(match_id=match.id, source=SOURCE, source_key=detail.match_id)
-    )
+    session.add(MatchSourceKey(match_id=match.id, source=SOURCE, source_key=detail.match_id))
     session.flush()
     return match
 
@@ -285,20 +284,18 @@ def _resolve_players(
 ) -> dict[int, Player]:
     """Map every squad member's NRL playerId to a canonical Player."""
     rlp_rows = _rlp_appearance_index(session, match)
-    minutes = {
-        s.player_id: s.stats.get("minutesPlayed") for s in detail.player_stats
-    }
+    minutes = {s.player_id: s.stats.get("minutesPlayed") for s in detail.player_stats}
     resolved: dict[int, Player] = {}
 
     for squad_player in detail.squads:
         alias = str(squad_player.player_id)
         existing = session.scalar(
-            select(PlayerAlias).where(
-                PlayerAlias.source == SOURCE, PlayerAlias.alias == alias
-            )
+            select(PlayerAlias).where(PlayerAlias.source == SOURCE, PlayerAlias.alias == alias)
         )
         if existing is not None:
-            resolved[squad_player.player_id] = session.get(Player, existing.player_id)
+            player = session.get(Player, existing.player_id)
+            assert player is not None  # alias FK guarantees the player row
+            resolved[squad_player.player_id] = player
             continue
 
         team_id = side_team[squad_player.side].id
@@ -309,7 +306,10 @@ def _resolve_players(
             if player is not None:
                 logger.info(
                     "match %s: matched %r by jersey %d to %r",
-                    match.source_key, full_name, squad_player.number, player.full_name,
+                    match.source_key,
+                    full_name,
+                    squad_player.number,
+                    player.full_name,
                 )
         if player is None:
             # NRL squads include non-playing reserves (the 18th man); RLP
@@ -327,7 +327,9 @@ def _resolve_players(
             if rlp_rows:  # RLP squad known, so this should have matched
                 logger.warning(
                     "match %s: no RLP counterpart for %r (#%s), created new player",
-                    match.source_key, full_name, squad_player.number,
+                    match.source_key,
+                    full_name,
+                    squad_player.number,
                 )
         session.add(PlayerAlias(player_id=player.id, alias=alias, source=SOURCE))
         session.flush()
@@ -365,9 +367,7 @@ def _load_player_stats(
     if timeline_ok:
         for try_event in detail.tries:
             if try_event.player_id is not None:
-                timeline_tries[try_event.player_id] = (
-                    timeline_tries.get(try_event.player_id, 0) + 1
-                )
+                timeline_tries[try_event.player_id] = timeline_tries.get(try_event.player_id, 0) + 1
     existing = {
         stats.player_id: stats
         for stats in session.scalars(
@@ -442,14 +442,12 @@ def load_team_list(
         for alias in session.scalars(
             select(PlayerAlias).where(
                 PlayerAlias.source == SOURCE,
-                PlayerAlias.alias.in_(
-                    [str(p.player_id) for p in detail.squads]
-                ),
+                PlayerAlias.alias.in_([str(p.player_id) for p in detail.squads]),
             )
         )
     }
     side_team = {"home": home_team, "away": away_team}
-    captured_at = datetime.now(timezone.utc)
+    captured_at = datetime.now(UTC)
 
     session.execute(delete(TeamListEntry).where(TeamListEntry.match_id == match.id))
     unresolved = 0
@@ -462,9 +460,7 @@ def load_team_list(
                 match_id=match.id,
                 team_id=side_team[squad_player.side].id,
                 player_id=player_id,
-                player_name=(
-                    f"{squad_player.first_name} {squad_player.last_name}".strip()
-                ),
+                player_name=(f"{squad_player.first_name} {squad_player.last_name}".strip()),
                 position=canonical_position(squad_player.position),
                 jersey_number=squad_player.number,
                 source=SOURCE,
@@ -474,7 +470,9 @@ def load_team_list(
     if unresolved:
         logger.info(
             "match %s team list: %d/%d players have no appearance history yet",
-            match.source_key, unresolved, len(detail.squads),
+            match.source_key,
+            unresolved,
+            len(detail.squads),
         )
     session.flush()
     return True
@@ -501,10 +499,12 @@ def _load_try_events(
         if team_id is None:
             logger.warning(
                 "match %s try %d: unknown NRL team id %s",
-                match.source_key, order, try_event.team_id,
+                match.source_key,
+                order,
+                try_event.team_id,
             )
             continue
-        player = players.get(try_event.player_id)
+        player = players.get(try_event.player_id) if try_event.player_id is not None else None
         session.add(
             TryEvent(
                 match_id=match.id,
@@ -512,9 +512,7 @@ def _load_try_events(
                 player_id=player.id if player is not None else None,
                 scoring_order=order,
                 minute=(
-                    try_event.game_seconds // 60
-                    if try_event.game_seconds is not None
-                    else None
+                    try_event.game_seconds // 60 if try_event.game_seconds is not None else None
                 ),
             )
         )

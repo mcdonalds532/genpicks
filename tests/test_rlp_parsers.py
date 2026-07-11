@@ -65,7 +65,7 @@ def test_season_dates_are_monotonic_within_rounds(season_rows):
     # Guards the month carry-forward logic across the whole season: matches
     # in round order should never jump backwards by more than a bye weekend.
     dates = [row.date for row in season_rows]
-    for previous, current in zip(dates, dates[1:]):
+    for previous, current in zip(dates, dates[1:], strict=False):
         assert (current - previous).days > -8
 
 
@@ -80,11 +80,7 @@ def test_match_info(match_detail):
 
 
 def test_match_try_scorers(match_detail):
-    tries = {
-        (e.side, e.player_name): e.count
-        for e in match_detail.scoresheet
-        if e.stat == "Tries"
-    }
+    tries = {(e.side, e.player_name): e.count for e in match_detail.scoresheet if e.stat == "Tries"}
     assert tries == {
         ("home", "Sebastian KRIS"): 2,
         ("home", "Xavier SAVAGE"): 2,

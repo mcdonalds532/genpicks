@@ -1,6 +1,6 @@
 """API endpoint tests against a seeded in-memory database."""
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -40,78 +40,187 @@ def client():
     with Session(engine) as session:
         session.add_all([Team(id=1, name="Alpha"), Team(id=2, name="Beta")])
         session.add(Venue(id=1, name="Big Stadium"))
-        session.add_all([
-            Player(id=1, full_name="Flash Winger"),
-            Player(id=2, full_name="Late Callup"),
-        ])
+        session.add_all(
+            [
+                Player(id=1, full_name="Flash Winger"),
+                Player(id=2, full_name="Late Callup"),
+            ]
+        )
         session.add_all(
             [
                 # settled match with a correct home prediction
-                Match(id=1, season=2026, round="1", match_date=TODAY - timedelta(days=30),
-                      home_team_id=1, away_team_id=2, home_score=20, away_score=10,
-                      venue_id=1, source="t", source_key="m1"),
+                Match(
+                    id=1,
+                    season=2026,
+                    round="1",
+                    match_date=TODAY - timedelta(days=30),
+                    home_team_id=1,
+                    away_team_id=2,
+                    home_score=20,
+                    away_score=10,
+                    venue_id=1,
+                    source="t",
+                    source_key="m1",
+                ),
                 # upcoming fixture
-                Match(id=2, season=2026, round="20", match_date=TODAY + timedelta(days=3),
-                      home_team_id=2, away_team_id=1, venue_id=1,
-                      source="t", source_key="m2"),
+                Match(
+                    id=2,
+                    season=2026,
+                    round="20",
+                    match_date=TODAY + timedelta(days=3),
+                    home_team_id=2,
+                    away_team_id=1,
+                    venue_id=1,
+                    source="t",
+                    source_key="m2",
+                ),
             ]
         )
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         session.add_all(
             [
-                User(id=1, github_id="100", name="Paying Punter",
-                     created_at=now, subscription_status="active"),
+                User(
+                    id=1,
+                    github_id="100",
+                    name="Paying Punter",
+                    created_at=now,
+                    subscription_status="active",
+                ),
                 User(id=2, github_id="200", name="Free Fan", created_at=now),
             ]
         )
         session.add_all(
             [
-                Prediction(model_version="v_test", match_id=1, market="h2h",
-                           team_id=1, probability=0.7, generated_at=now),
-                Prediction(model_version="v_test", match_id=1, market="h2h",
-                           team_id=2, probability=0.3, generated_at=now),
-                Prediction(model_version="v_test", match_id=2, market="h2h",
-                           team_id=2, probability=0.55, generated_at=now),
-                Prediction(model_version="v_test", match_id=2, market="h2h",
-                           team_id=1, probability=0.45, generated_at=now),
+                Prediction(
+                    model_version="v_test",
+                    match_id=1,
+                    market="h2h",
+                    team_id=1,
+                    probability=0.7,
+                    generated_at=now,
+                ),
+                Prediction(
+                    model_version="v_test",
+                    match_id=1,
+                    market="h2h",
+                    team_id=2,
+                    probability=0.3,
+                    generated_at=now,
+                ),
+                Prediction(
+                    model_version="v_test",
+                    match_id=2,
+                    market="h2h",
+                    team_id=2,
+                    probability=0.55,
+                    generated_at=now,
+                ),
+                Prediction(
+                    model_version="v_test",
+                    match_id=2,
+                    market="h2h",
+                    team_id=1,
+                    probability=0.45,
+                    generated_at=now,
+                ),
                 # projected-lineup generation, superseded by the official one
                 # below: only the newest generation may be served
-                Prediction(model_version="v_test", match_id=2, market="anytime_try",
-                           team_id=1, player_id=1, probability=0.42,
-                           generated_at=now - timedelta(hours=2),
-                           lineup_source="projected"),
-                Prediction(model_version="v_test", match_id=2, market="first_try",
-                           team_id=1, player_id=1, probability=0.08,
-                           generated_at=now - timedelta(hours=2),
-                           lineup_source="projected"),
-                Prediction(model_version="v_test", match_id=2, market="anytime_try",
-                           team_id=1, player_id=1, probability=0.5,
-                           generated_at=now, lineup_source="official"),
-                Prediction(model_version="v_test", match_id=2, market="anytime_try",
-                           team_id=1, player_id=2, probability=0.3,
-                           generated_at=now, lineup_source="official"),
-                Prediction(model_version="v_test", match_id=2, market="first_try",
-                           team_id=1, player_id=1, probability=0.1,
-                           generated_at=now, lineup_source="official"),
+                Prediction(
+                    model_version="v_test",
+                    match_id=2,
+                    market="anytime_try",
+                    team_id=1,
+                    player_id=1,
+                    probability=0.42,
+                    generated_at=now - timedelta(hours=2),
+                    lineup_source="projected",
+                ),
+                Prediction(
+                    model_version="v_test",
+                    match_id=2,
+                    market="first_try",
+                    team_id=1,
+                    player_id=1,
+                    probability=0.08,
+                    generated_at=now - timedelta(hours=2),
+                    lineup_source="projected",
+                ),
+                Prediction(
+                    model_version="v_test",
+                    match_id=2,
+                    market="anytime_try",
+                    team_id=1,
+                    player_id=1,
+                    probability=0.5,
+                    generated_at=now,
+                    lineup_source="official",
+                ),
+                Prediction(
+                    model_version="v_test",
+                    match_id=2,
+                    market="anytime_try",
+                    team_id=1,
+                    player_id=2,
+                    probability=0.3,
+                    generated_at=now,
+                    lineup_source="official",
+                ),
+                Prediction(
+                    model_version="v_test",
+                    match_id=2,
+                    market="first_try",
+                    team_id=1,
+                    player_id=1,
+                    probability=0.1,
+                    generated_at=now,
+                    lineup_source="official",
+                ),
             ]
         )
         session.add_all(
             [
                 # stale snapshot that must not be served
-                OddsSnapshot(source="oddsapi", market="h2h", match_id=2, team_id=2,
-                             selection_name="Beta", price_decimal=1.9,
-                             captured_at=now - timedelta(hours=6),
-                             raw={"bookmaker": "tab", "title": "TAB"}),
+                OddsSnapshot(
+                    source="oddsapi",
+                    market="h2h",
+                    match_id=2,
+                    team_id=2,
+                    selection_name="Beta",
+                    price_decimal=1.9,
+                    captured_at=now - timedelta(hours=6),
+                    raw={"bookmaker": "tab", "title": "TAB"},
+                ),
                 # newest snapshot: two bookmakers, best price per team wins
-                OddsSnapshot(source="oddsapi", market="h2h", match_id=2, team_id=2,
-                             selection_name="Beta", price_decimal=1.8,
-                             captured_at=now, raw={"bookmaker": "tab", "title": "TAB"}),
-                OddsSnapshot(source="oddsapi", market="h2h", match_id=2, team_id=2,
-                             selection_name="Beta", price_decimal=1.85, captured_at=now,
-                             raw={"bookmaker": "sportsbet", "title": "SportsBet"}),
-                OddsSnapshot(source="oddsapi", market="h2h", match_id=2, team_id=1,
-                             selection_name="Alpha", price_decimal=2.1,
-                             captured_at=now, raw={"bookmaker": "tab", "title": "TAB"}),
+                OddsSnapshot(
+                    source="oddsapi",
+                    market="h2h",
+                    match_id=2,
+                    team_id=2,
+                    selection_name="Beta",
+                    price_decimal=1.8,
+                    captured_at=now,
+                    raw={"bookmaker": "tab", "title": "TAB"},
+                ),
+                OddsSnapshot(
+                    source="oddsapi",
+                    market="h2h",
+                    match_id=2,
+                    team_id=2,
+                    selection_name="Beta",
+                    price_decimal=1.85,
+                    captured_at=now,
+                    raw={"bookmaker": "sportsbet", "title": "SportsBet"},
+                ),
+                OddsSnapshot(
+                    source="oddsapi",
+                    market="h2h",
+                    match_id=2,
+                    team_id=1,
+                    selection_name="Alpha",
+                    price_decimal=2.1,
+                    captured_at=now,
+                    raw={"bookmaker": "tab", "title": "TAB"},
+                ),
             ]
         )
         session.commit()
@@ -183,7 +292,8 @@ def test_try_markets_locked_without_entitled_viewer(client):
 
 def test_user_sync_upserts_and_reports_subscription(client):
     unauthorized = client.post(
-        "/internal/users/sync", json={"github_id": "300"},
+        "/internal/users/sync",
+        json={"github_id": "300"},
         headers={"X-Internal-Key": "wrong"},
     )
     assert unauthorized.status_code == 401
@@ -204,7 +314,8 @@ def test_user_sync_upserts_and_reports_subscription(client):
     assert updated["user_id"] == created["user_id"]
 
     subscribed = client.post(
-        "/internal/users/sync", json={"github_id": "100"},
+        "/internal/users/sync",
+        json={"github_id": "100"},
         headers={"X-Internal-Key": INTERNAL_KEY},
     ).json()
     assert subscribed["user_id"] == 1

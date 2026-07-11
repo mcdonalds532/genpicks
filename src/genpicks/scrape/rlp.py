@@ -29,11 +29,29 @@ SOURCE = "rlp"
 BASE_URL = "https://www.rugbyleagueproject.org"
 
 _MONTHS = {
-    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
-    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
-    "january": 1, "february": 2, "march": 3, "april": 4, "june": 6,
-    "july": 7, "august": 8, "september": 9, "october": 10,
-    "november": 11, "december": 12,
+    "jan": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "may": 5,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "oct": 10,
+    "nov": 11,
+    "dec": 12,
+    "january": 1,
+    "february": 2,
+    "march": 3,
+    "april": 4,
+    "june": 6,
+    "july": 7,
+    "august": 8,
+    "september": 9,
+    "october": 10,
+    "november": 11,
+    "december": 12,
 }
 
 _FINALS_ROUNDS = {
@@ -86,7 +104,7 @@ class SeasonMatchRow:
 
 
 def normalize_round(label: str) -> str:
-    """"Round 5 - Multicultural Round" -> "5"; "Grand Final" -> "GF"."""
+    """ "Round 5 - Multicultural Round" -> "5"; "Grand Final" -> "GF"."""
     base = label.split(" - ")[0].strip()
     if base in _FINALS_ROUNDS:
         return _FINALS_ROUNDS[base]
@@ -119,16 +137,14 @@ def parse_season_results(html: str, season: int) -> list[SeasonMatchRow]:
         if match_link is None or current_round is None:
             continue
 
-        match_date, current_month = _parse_row_date(
-            _text(tds[1]), season, current_month
-        )
+        match_date, current_month = _parse_row_date(_text(tds[1]), season, current_month)
         home_name, home_slug = _team_cell(tds[3])
         away_name, away_slug = _team_cell(tds[5])
         venue_id, venue_name = _venue_cell(tds[8])
 
         rows.append(
             SeasonMatchRow(
-                source_key=match_link["href"].rsplit("/", 1)[-1],
+                source_key=str(match_link["href"]).rsplit("/", 1)[-1],
                 season=season,
                 round=current_round,
                 date=match_date,
@@ -180,7 +196,7 @@ def _team_cell(td: Tag) -> tuple[str, str]:
     link = td.find("a", href=re.compile(r"^/seasons/.+/summary\.html$"))
     if link is None:
         return _text(td), ""
-    slug = link["href"].split("/")[-2]
+    slug = str(link["href"]).split("/")[-2]
     return link.get_text(strip=True), slug
 
 
@@ -189,7 +205,7 @@ def _venue_cell(td: Tag) -> tuple[str | None, str | None]:
     if link is None:
         name = _text(td)
         return None, name or None
-    return link["href"].rsplit("/", 1)[-1], link.get_text(strip=True)
+    return str(link["href"]).rsplit("/", 1)[-1], link.get_text(strip=True)
 
 
 # --------------------------------------------------------------------------
@@ -266,7 +282,7 @@ def _parse_info_rows(tbody: Tag | None) -> dict:
             link = td.find("a", href=re.compile(r"^/venues/(\d+)$"))
             city_match = re.search(r"\(([^)]+)\)\s*$", td.get_text(" ", strip=True))
             info["_venue"] = (
-                link["href"].rsplit("/", 1)[-1] if link else None,
+                str(link["href"]).rsplit("/", 1)[-1] if link else None,
                 link.get_text(strip=True) if link else None,
                 city_match.group(1) if city_match else None,
             )
@@ -297,7 +313,7 @@ def _parse_scoresheet(tbody: Tag | None) -> list[ScoresheetEntry]:
     for tr in tbody.find_all("tr"):
         abbr = tr.find("abbr")
         if abbr is not None and abbr.get("title"):
-            stat = abbr["title"]
+            stat = str(abbr["title"])
         if stat is None:
             continue
         tds = tr.find_all("td")
@@ -326,7 +342,7 @@ def _scoresheet_entry(
     return ScoresheetEntry(
         stat=stat,
         side=side,
-        player_id=link["href"].rsplit("/", 1)[-1],
+        player_id=str(link["href"]).rsplit("/", 1)[-1],
         player_name=link.get_text(" ", strip=True),
         raw_value=raw_value,
         count=count,
@@ -342,7 +358,7 @@ def _parse_teams(tbody: Tag | None) -> list[Appearance]:
         tds = tr.find_all("td")
         if abbr is None or not abbr.get("title") or len(tds) != 4:
             continue
-        position = abbr["title"]
+        position = str(abbr["title"])
         for side, player_td, jersey_td in (
             ("home", tds[0], tds[1]),
             ("away", tds[3], tds[2]),
@@ -353,7 +369,7 @@ def _parse_teams(tbody: Tag | None) -> list[Appearance]:
             appearances.append(
                 Appearance(
                     side=side,
-                    player_id=link["href"].rsplit("/", 1)[-1],
+                    player_id=str(link["href"]).rsplit("/", 1)[-1],
                     player_name=link.get_text(" ", strip=True),
                     jersey=_int_or_none(jersey_td.get_text(strip=True)),
                     position=position,
@@ -363,7 +379,7 @@ def _parse_teams(tbody: Tag | None) -> list[Appearance]:
 
 
 def _parse_long_date(raw: str) -> date | None:
-    """"Saturday, 1st March, 2025" -> date(2025, 3, 1)."""
+    """ "Saturday, 1st March, 2025" -> date(2025, 3, 1)."""
     m = re.search(r"(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+),?\s+(\d{4})", raw)
     if m is None:
         return None

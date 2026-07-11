@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from genpicks.db.models import Base, Match, Player, PlayerMatchStats, Team, TryEvent
 from genpicks.ml.tries import (
-    SHARE_ALPHA,
     build_share_dataset,
     build_team_try_dataset,
     load_try_data,
@@ -25,38 +24,47 @@ def engine():
         session.add_all([Player(id=n, full_name=f"P{n}") for n in range(1, 7)])
         session.add_all(
             [
-                Match(id=1, season=2024, round="1", match_date=date(2024, 3, 1),
-                      home_team_id=1, away_team_id=2, home_score=16, away_score=4,
-                      source="t", source_key="m1"),
-                Match(id=2, season=2024, round="2", match_date=date(2024, 3, 8),
-                      home_team_id=2, away_team_id=1, home_score=8, away_score=8,
-                      source="t", source_key="m2"),
+                Match(
+                    id=1,
+                    season=2024,
+                    round="1",
+                    match_date=date(2024, 3, 1),
+                    home_team_id=1,
+                    away_team_id=2,
+                    home_score=16,
+                    away_score=4,
+                    source="t",
+                    source_key="m1",
+                ),
+                Match(
+                    id=2,
+                    season=2024,
+                    round="2",
+                    match_date=date(2024, 3, 8),
+                    home_team_id=2,
+                    away_team_id=1,
+                    home_score=8,
+                    away_score=8,
+                    source="t",
+                    source_key="m2",
+                ),
             ]
         )
         # match 1: Alpha scores 3 tries (P1 x2, P2 x1), Beta 1 try (P4)
         session.add_all(
             [
-                PlayerMatchStats(match_id=1, player_id=1, team_id=1,
-                                 position="Wing", tries=2),
-                PlayerMatchStats(match_id=1, player_id=2, team_id=1,
-                                 position="Prop", tries=1),
-                PlayerMatchStats(match_id=1, player_id=3, team_id=1,
-                                 position="Prop", tries=0),
-                PlayerMatchStats(match_id=1, player_id=4, team_id=2,
-                                 position="Wing", tries=1),
-                PlayerMatchStats(match_id=1, player_id=5, team_id=2,
-                                 position="Prop", tries=0),
+                PlayerMatchStats(match_id=1, player_id=1, team_id=1, position="Wing", tries=2),
+                PlayerMatchStats(match_id=1, player_id=2, team_id=1, position="Prop", tries=1),
+                PlayerMatchStats(match_id=1, player_id=3, team_id=1, position="Prop", tries=0),
+                PlayerMatchStats(match_id=1, player_id=4, team_id=2, position="Wing", tries=1),
+                PlayerMatchStats(match_id=1, player_id=5, team_id=2, position="Prop", tries=0),
                 # match 2: one try each side
-                PlayerMatchStats(match_id=2, player_id=4, team_id=2,
-                                 position="Wing", tries=1),
-                PlayerMatchStats(match_id=2, player_id=1, team_id=1,
-                                 position="Wing", tries=1),
-                PlayerMatchStats(match_id=2, player_id=6, team_id=1,
-                                 position="Prop", tries=0),
+                PlayerMatchStats(match_id=2, player_id=4, team_id=2, position="Wing", tries=1),
+                PlayerMatchStats(match_id=2, player_id=1, team_id=1, position="Wing", tries=1),
+                PlayerMatchStats(match_id=2, player_id=6, team_id=1, position="Prop", tries=0),
             ]
         )
-        session.add(TryEvent(match_id=1, team_id=1, player_id=1,
-                             scoring_order=1, minute=5))
+        session.add(TryEvent(match_id=1, team_id=1, player_id=1, scoring_order=1, minute=5))
         session.commit()
     return engine
 
@@ -93,9 +101,7 @@ def test_share_shrinks_to_prior_without_history(engine):
     first = shares[shares["match_id"] == 1]
     # nobody has history before match 1: raw share equals the position prior
     for row in first.itertuples():
-        assert row.share_raw == pytest.approx(
-            priors[row.position], abs=1e-9
-        )
+        assert row.share_raw == pytest.approx(priors[row.position], abs=1e-9)
     # lineup renormalisation: shares sum to 1 per team
     for (_, _), group in shares.groupby(["match_id", "team_id"]):
         assert group["share"].sum() == pytest.approx(1.0)

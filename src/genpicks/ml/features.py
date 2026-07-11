@@ -131,19 +131,19 @@ def build_match_dataset(engine: Engine, include_unplayed: bool = False) -> pd.Da
             "away_score": match.away_score,
             "home_win": (
                 None
-                if match.home_score == match.away_score
+                if match.home_score is None
+                or match.away_score is None
+                or match.home_score == match.away_score
                 else match.home_score > match.away_score
             ),
-            "elo_expected_home": _elo_expected(
-                home.elo + ELO_HOME_ADVANTAGE, away.elo
-            ),
+            "elo_expected_home": _elo_expected(home.elo + ELO_HOME_ADVANTAGE, away.elo),
         }
         row.update(_snapshot(home, "home", match.match_date, match.season))
         row.update(_snapshot(away, "away", match.match_date, match.season))
         row["elo_diff"] = home.elo - away.elo
         rows.append(row)
 
-        if match.home_score is None:
+        if match.home_score is None or match.away_score is None:
             continue  # unplayed fixture: snapshot only, never update state
 
         # ---- update state AFTER snapshotting (leakage barrier) ----
@@ -170,8 +170,14 @@ def build_match_dataset(engine: Engine, include_unplayed: bool = False) -> pd.Da
     # ~1200 training matches the tree model overfits the raw pairs (first
     # run: XGB 0.663 test log loss vs 0.653 for its own Elo input).
     for name in (
-        "season_win_rate", "rest_days", "win_rate_5", "win_rate_10",
-        "margin_5", "margin_10", "points_for_5", "points_against_5",
+        "season_win_rate",
+        "rest_days",
+        "win_rate_5",
+        "win_rate_10",
+        "margin_5",
+        "margin_10",
+        "points_for_5",
+        "points_against_5",
     ):
         data[f"{name}_diff"] = data[f"home_{name}"] - data[f"away_{name}"]
     return data

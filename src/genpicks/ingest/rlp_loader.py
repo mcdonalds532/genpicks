@@ -35,14 +35,10 @@ def load_season_rows(session: Session, rows: list[SeasonMatchRow]) -> dict[str, 
         # would violate NOT NULL.
         home_team_id = resolver.team(row.home_slug, row.home_name).id
         away_team_id = resolver.team(row.away_slug, row.away_name).id
-        venue_id = (
-            resolver.venue(row.venue_id, row.venue_name).id if row.venue_id else None
-        )
+        venue_id = resolver.venue(row.venue_id, row.venue_name).id if row.venue_id else None
 
         match = session.scalar(
-            select(Match).where(
-                Match.source == SOURCE, Match.source_key == row.source_key
-            )
+            select(Match).where(Match.source == SOURCE, Match.source_key == row.source_key)
         )
         if match is None:
             match = Match(source=SOURCE, source_key=row.source_key)
@@ -66,7 +62,7 @@ def load_match_detail(session: Session, match: Match, detail: MatchDetail) -> in
     resolver = Resolver(session, SOURCE)
     completed = (detail.status or "").lower() == "completed"
 
-    if detail.venue_city and match.venue_id is not None:
+    if detail.venue_city and detail.venue_id is not None and match.venue_id is not None:
         venue = resolver.venue(detail.venue_id, detail.venue_name, detail.venue_city)
         if venue.id != match.venue_id:
             logger.warning(
@@ -100,9 +96,7 @@ def load_match_detail(session: Session, match: Match, detail: MatchDetail) -> in
             stats = PlayerMatchStats(match_id=match.id, player_id=player.id)
             session.add(stats)
 
-        stats.team_id = (
-            match.home_team_id if appearance.side == "home" else match.away_team_id
-        )
+        stats.team_id = match.home_team_id if appearance.side == "home" else match.away_team_id
         stats.position = appearance.position
         stats.jersey_number = appearance.jersey
         stats.tries = tries.get(appearance.player_id, 0 if completed else None)

@@ -294,9 +294,7 @@ class Prediction(Base):
     """Model output, versioned and append-only to build a public track record."""
 
     __tablename__ = "predictions"
-    __table_args__ = (
-        Index("ix_predictions_match_market", "match_id", "market"),
-    )
+    __table_args__ = (Index("ix_predictions_match_market", "match_id", "market"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     model_version: Mapped[str] = mapped_column(String(50))

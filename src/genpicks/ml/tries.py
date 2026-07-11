@@ -38,10 +38,14 @@ SHARE_ALPHA = 12.0  # pseudo team-tries of shrinkage toward the position prior
 TEAM_FEATURES = [
     "is_home",
     "round_number",
-    "tries_for_5", "tries_for_10",
-    "tries_against_5", "tries_against_10",
-    "opp_tries_for_5", "opp_tries_for_10",
-    "opp_tries_against_5", "opp_tries_against_10",
+    "tries_for_5",
+    "tries_for_10",
+    "tries_against_5",
+    "tries_against_10",
+    "opp_tries_for_5",
+    "opp_tries_for_10",
+    "opp_tries_against_5",
+    "opp_tries_against_10",
     "season_tries_per_game",
 ]
 
@@ -123,9 +127,7 @@ def _avg(values, window):
 
 def build_team_try_dataset(data: TryData) -> pd.DataFrame:
     """One row per team per played match; target `tries`, features pre-match."""
-    team_tries = (
-        data.appearances.groupby(["match_id", "team_id"])["tries"].sum().to_dict()
-    )
+    team_tries = data.appearances.groupby(["match_id", "team_id"])["tries"].sum().to_dict()
     states: dict[int, _TeamTryState] = {}
     rows = []
     for match in data.matches.itertuples():
@@ -156,14 +158,10 @@ def build_team_try_dataset(data: TryData) -> pd.DataFrame:
                     "opp_tries_against_5": _avg(opp.conceded, 5),
                     "opp_tries_against_10": _avg(opp.conceded, 10),
                     "season_tries_per_game": (
-                        team.season_tries / team.season_games
-                        if team.season_games
-                        else None
+                        team.season_tries / team.season_games if team.season_games else None
                     ),
                     "tries": (
-                        team_tries.get((match.match_id, team_id), 0)
-                        if match.played
-                        else None
+                        team_tries.get((match.match_id, team_id), 0) if match.played else None
                     ),
                 }
             )
@@ -193,17 +191,13 @@ def build_team_try_dataset(data: TryData) -> pd.DataFrame:
 # --------------------------------------------------------------------------
 
 
-def position_priors(
-    data: TryData, train_seasons: set[int]
-) -> tuple[dict[str, float], float]:
+def position_priors(data: TryData, train_seasons: set[int]) -> tuple[dict[str, float], float]:
     """Prior try share per position from training seasons only.
 
     Returns ({position: share of a team's tries}, fallback share).
     Share = (position tries per player-game) / (team tries per game).
     """
-    train_ids = set(
-        data.matches[data.matches["season"].isin(train_seasons)]["match_id"]
-    )
+    train_ids = set(data.matches[data.matches["season"].isin(train_seasons)]["match_id"])
     apps = data.appearances[data.appearances["match_id"].isin(train_ids)]
     team_games = apps.groupby(["match_id", "team_id"]).ngroups
     if team_games == 0:
@@ -234,21 +228,16 @@ def build_share_dataset(
     collapsing to the position prior with no history and to the empirical
     share with lots of it.
     """
-    team_tries = (
-        data.appearances.groupby(["match_id", "team_id"])["tries"].sum().to_dict()
-    )
-    mean_team_tries = (
-        sum(team_tries.values()) / len(team_tries) if team_tries else 0.0
-    )
+    team_tries = data.appearances.groupby(["match_id", "team_id"])["tries"].sum().to_dict()
+    mean_team_tries = sum(team_tries.values()) / len(team_tries) if team_tries else 0.0
     order = {m: i for i, m in enumerate(data.matches["match_id"])}
-    apps = data.appearances.sort_values(
-        "match_id", key=lambda s: s.map(order)
-    )
+    apps = data.appearances.sort_values("match_id", key=lambda s: s.map(order))
 
     states: dict[int, _PlayerShareState] = {}
     rows = []
     current_match = None
-    pending = []  # (state, player_tries, team_tries) applied after the match
+    # (state, player_tries, team_tries) applied after the match
+    pending: list[tuple[_PlayerShareState, int, int]] = []
     for app in apps.itertuples():
         if app.match_id != current_match:
             for state, p_tries, t_tries in pending:
@@ -302,9 +291,7 @@ def current_shares(
     Same formula as build_share_dataset but evaluated after the last played
     match, for serving. Caller renormalises over the lineup.
     """
-    team_tries = (
-        data.appearances.groupby(["match_id", "team_id"])["tries"].sum().to_dict()
-    )
+    team_tries = data.appearances.groupby(["match_id", "team_id"])["tries"].sum().to_dict()
     mean_team_tries = sum(team_tries.values()) / len(team_tries) if team_tries else 0.0
     pseudo = SHARE_ALPHA * mean_team_tries
     order = {m: i for i, m in enumerate(data.matches["match_id"])}
@@ -316,7 +303,7 @@ def current_shares(
         hist_player = int(history["tries"].sum())
         hist_team = sum(
             team_tries.get((m, t), 0)
-            for m, t in zip(history["match_id"], history["team_id"])
+            for m, t in zip(history["match_id"], history["team_id"], strict=True)
         )
         prior = priors.get(position or "Unknown", fallback_prior)
         shares[player_id] = (

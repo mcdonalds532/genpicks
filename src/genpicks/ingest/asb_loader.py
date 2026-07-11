@@ -13,7 +13,7 @@ Sydney date, match_date is venue-local, e.g. Las Vegas).
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -46,9 +46,7 @@ ASB_NAME_TO_RLP_SLUG = {
 }
 
 
-def load_asb_odds(
-    session: Session, rows: list[AsbMatchOdds], seasons: set[int]
-) -> tuple[int, int]:
+def load_asb_odds(session: Session, rows: list[AsbMatchOdds], seasons: set[int]) -> tuple[int, int]:
     """Returns (matches with odds loaded, rows that found no match)."""
     loaded = unmatched = 0
     for row in rows:
@@ -99,13 +97,15 @@ def _resolve_match(session: Session, row: AsbMatchOdds) -> Match | None:
                 Match.away_team_id == away.id,
             )
         )
-        if m.match_date is not None
-        and abs(m.match_date - row.date) <= timedelta(days=1)
+        if m.match_date is not None and abs(m.match_date - row.date) <= timedelta(days=1)
     ]
     if len(candidates) != 1:
         logger.warning(
             "ASB row %s %s v %s: %d canonical candidates, skipping",
-            row.date, row.home_name, row.away_name, len(candidates),
+            row.date,
+            row.home_name,
+            row.away_name,
+            len(candidates),
         )
         return None
     return candidates[0]
@@ -119,9 +119,7 @@ def _replace_snapshots(session: Session, match: Match, row: AsbMatchOdds) -> Non
             OddsSnapshot.market == MARKET_H2H,
         )
     )
-    captured_at = match.kickoff_utc or datetime.combine(
-        row.date, datetime.min.time(), tzinfo=timezone.utc
-    )
+    captured_at = match.kickoff_utc or datetime.combine(row.date, datetime.min.time(), tzinfo=UTC)
     selections = [
         (row.home_name, match.home_team_id, row.home_odds_close or row.home_odds_avg),
         (row.away_name, match.away_team_id, row.away_odds_close or row.away_odds_avg),

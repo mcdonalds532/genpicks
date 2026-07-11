@@ -83,9 +83,7 @@ def test_venue_sponsor_rename_resolves_to_same_venue(session):
     first = resolver.venue("8", "Pirtek Stadium")
     renamed = resolver.venue("8", "CommBank Stadium")
     assert renamed.id == first.id
-    aliases = set(
-        session.scalars(select(VenueAlias.alias).where(VenueAlias.venue_id == first.id))
-    )
+    aliases = set(session.scalars(select(VenueAlias.alias).where(VenueAlias.venue_id == first.id)))
     assert aliases == {"8", "Pirtek Stadium", "CommBank Stadium"}
 
 
@@ -131,9 +129,7 @@ def test_match_detail_load(session, season_rows, match_detail):
     assert count >= 34  # both 17-player squads
 
     stats = list(
-        session.scalars(
-            select(PlayerMatchStats).where(PlayerMatchStats.match_id == match.id)
-        )
+        session.scalars(select(PlayerMatchStats).where(PlayerMatchStats.match_id == match.id))
     )
     assert len(stats) == count
 

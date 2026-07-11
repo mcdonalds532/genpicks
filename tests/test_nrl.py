@@ -1,4 +1,4 @@
-﻿"""NRL.com parser and loader tests against real saved JSON.
+"""NRL.com parser and loader tests against real saved JSON.
 
 The 2025 fixtures are the same real match as the RLP fixtures (the Vegas
 opener, Raiders v Warriors), so the ingest test exercises genuine
@@ -6,7 +6,7 @@ cross-source reconciliation: RLP creates the canonical rows, then the NRL
 loader must attach to them without creating duplicates.
 """
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 
 from genpicks.db.models import (
     Base,
-    Match,
     MatchSourceKey,
     Player,
     PlayerAlias,
@@ -32,9 +31,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 @pytest.fixture(scope="module")
 def draw():
-    return nrl.parse_draw(
-        (FIXTURES / "nrl-draw-2025-round-1.json").read_text(encoding="utf-8")
-    )
+    return nrl.parse_draw((FIXTURES / "nrl-draw-2025-round-1.json").read_text(encoding="utf-8"))
 
 
 @pytest.fixture(scope="module")
@@ -52,7 +49,7 @@ def test_parse_draw(draw):
     assert draw.round_numbers[0] == 1 and len(draw.round_numbers) >= 27
     f = draw.fixtures[0]
     assert f.match_centre_path == "/draw/nrl-premiership/2025/round-1/raiders-v-warriors/"
-    assert f.kickoff_utc == datetime(2025, 3, 2, 0, 0, tzinfo=timezone.utc)
+    assert f.kickoff_utc == datetime(2025, 3, 2, 0, 0, tzinfo=UTC)
     assert (f.home_nickname, f.home_score) == ("Raiders", 30)
     assert (f.away_nickname, f.away_score) == ("Warriors", 8)
     assert f.is_played
@@ -62,7 +59,7 @@ def test_parse_draw(draw):
 def test_parse_match_2025(vegas_detail):
     d = vegas_detail
     assert d.match_id == "20251110110"
-    assert d.start_time_utc == datetime(2025, 3, 2, 0, 0, tzinfo=timezone.utc)
+    assert d.start_time_utc == datetime(2025, 3, 2, 0, 0, tzinfo=UTC)
     assert len(d.squads) == 36  # 18-player squads listed per side
     assert len(d.player_stats) == 36
     # timeline tries arrive in scoring order with times: 5 + 2 = 7 tries
@@ -81,7 +78,7 @@ def test_parse_match_2016_has_same_shape():
         (FIXTURES / "nrl-match-2016-eels-v-broncos.json").read_text(encoding="utf-8")
     )
     assert d.match_id == "20161110110"
-    assert d.start_time_utc == datetime(2016, 3, 3, 9, 5, tzinfo=timezone.utc)
+    assert d.start_time_utc == datetime(2016, 3, 3, 9, 5, tzinfo=UTC)
     assert len(d.tries) == 4
     assert d.player_stats and "tacklesMade" in d.player_stats[0].stats
 
@@ -123,9 +120,7 @@ def test_nrl_attaches_to_rlp_match(session_with_rlp_data, draw, vegas_detail):
     session.commit()
 
     # reconciled onto the existing match, recorded in match_source_keys
-    key = session.scalar(
-        select(MatchSourceKey).where(MatchSourceKey.source == "nrl")
-    )
+    key = session.scalar(select(MatchSourceKey).where(MatchSourceKey.source == "nrl"))
     assert key.match_id == match.id
     assert key.source_key == "20251110110"
 
@@ -161,9 +156,7 @@ def test_nrl_attaches_to_rlp_match(session_with_rlp_data, draw, vegas_detail):
     # try events rebuilt with scoring order; first try is Sebastian Kris
     events = list(
         session.scalars(
-            select(TryEvent)
-            .where(TryEvent.match_id == match.id)
-            .order_by(TryEvent.scoring_order)
+            select(TryEvent).where(TryEvent.match_id == match.id).order_by(TryEvent.scoring_order)
         )
     )
     assert [e.scoring_order for e in events] == [1, 2, 3, 4, 5, 6, 7]
@@ -233,10 +226,7 @@ def test_team_list_resolves_known_players_and_replaces_on_reingest(
     session.commit()
     entries = list(session.scalars(select(TeamListEntry)))
     assert len(entries) == 36  # replaced, not appended
-    played = {
-        s.player_id for s in vegas_detail.player_stats
-        if s.stats.get("minutesPlayed")
-    }
+    played = {s.player_id for s in vegas_detail.player_stats if s.stats.get("minutesPlayed")}
     assert sum(e.player_id is not None for e in entries) == len(played)
     assert {e.match_id for e in entries} == {match.id}
     kris = session.scalar(
@@ -262,14 +252,25 @@ def test_debut_without_rlp_appearance_adopts_existing_same_name_player(
 
     detail = dataclasses.replace(
         vegas_detail,
-        squads=vegas_detail.squads + [NrlSquadPlayer(
-            side="home", player_id=999001, first_name="Totally",
-            last_name="Newman", position="Interchange", number=None,
-        )],
-        player_stats=vegas_detail.player_stats + [NrlPlayerStats(
-            side="home", player_id=999001,
-            stats={"playerId": 999001, "minutesPlayed": 11},
-        )],
+        squads=vegas_detail.squads
+        + [
+            NrlSquadPlayer(
+                side="home",
+                player_id=999001,
+                first_name="Totally",
+                last_name="Newman",
+                position="Interchange",
+                number=None,
+            )
+        ],
+        player_stats=vegas_detail.player_stats
+        + [
+            NrlPlayerStats(
+                side="home",
+                player_id=999001,
+                stats={"playerId": 999001, "minutesPlayed": 11},
+            )
+        ],
     )
     players_before = session.scalar(select(func.count()).select_from(Player))
     assert load_nrl_match(session, 2025, draw.fixtures[0], detail)

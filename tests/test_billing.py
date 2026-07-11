@@ -1,6 +1,6 @@
 """Billing endpoint tests with the Stripe SDK stubbed out."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -32,15 +32,18 @@ def client_and_db():
     )
     Base.metadata.create_all(engine)
     factory = sessionmaker(engine)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     with Session(engine) as session:
         session.add_all(
             [
-                User(id=1, github_id="100", email="a@x.com", name="Fresh User",
-                     created_at=now),
-                User(id=2, github_id="200", created_at=now,
-                     stripe_customer_id="cus_existing",
-                     subscription_status="active"),
+                User(id=1, github_id="100", email="a@x.com", name="Fresh User", created_at=now),
+                User(
+                    id=2,
+                    github_id="200",
+                    created_at=now,
+                    stripe_customer_id="cus_existing",
+                    subscription_status="active",
+                ),
             ]
         )
         session.commit()
@@ -51,15 +54,23 @@ def client_and_db():
 
     app.dependency_overrides[get_session] = override
     settings = get_settings()
-    saved = (settings.internal_api_key, settings.stripe_secret_key,
-             settings.stripe_webhook_secret, settings.stripe_price_id)
+    saved = (
+        settings.internal_api_key,
+        settings.stripe_secret_key,
+        settings.stripe_webhook_secret,
+        settings.stripe_price_id,
+    )
     settings.internal_api_key = INTERNAL_KEY
     settings.stripe_secret_key = "sk_test_x"
     settings.stripe_webhook_secret = "whsec_x"
     settings.stripe_price_id = "price_x"
     yield TestClient(app), factory
-    (settings.internal_api_key, settings.stripe_secret_key,
-     settings.stripe_webhook_secret, settings.stripe_price_id) = saved
+    (
+        settings.internal_api_key,
+        settings.stripe_secret_key,
+        settings.stripe_webhook_secret,
+        settings.stripe_price_id,
+    ) = saved
     app.dependency_overrides.clear()
 
 
@@ -74,17 +85,19 @@ def test_checkout_creates_customer_once_and_returns_url(client_and_db, monkeypat
     created = []
     checkouts = []
     monkeypatch.setattr(
-        stripe.Customer, "create",
+        stripe.Customer,
+        "create",
         lambda **kw: created.append(kw) or SimpleNamespace(id="cus_new"),
     )
     monkeypatch.setattr(
-        stripe.checkout.Session, "create",
-        lambda **kw: checkouts.append(kw)
-        or SimpleNamespace(url="https://checkout.stripe.test/sess"),
+        stripe.checkout.Session,
+        "create",
+        lambda **kw: (
+            checkouts.append(kw) or SimpleNamespace(url="https://checkout.stripe.test/sess")
+        ),
     )
 
-    body = client.post("/internal/billing/checkout", json=CHECKOUT_BODY,
-                       headers=INTERNAL).json()
+    body = client.post("/internal/billing/checkout", json=CHECKOUT_BODY, headers=INTERNAL).json()
     assert body == {"url": "https://checkout.stripe.test/sess"}
     assert created[0]["email"] == "a@x.com"
     assert user_row(factory, 1) == ("cus_new", None)  # not active until webhook
@@ -99,50 +112,79 @@ def test_checkout_creates_customer_once_and_returns_url(client_and_db, monkeypat
 
 def test_checkout_guards(client_and_db):
     client, _ = client_and_db
-    assert client.post("/internal/billing/checkout", json=CHECKOUT_BODY,
-                       headers={"X-Internal-Key": "wrong"}).status_code == 401
-    assert client.post("/internal/billing/checkout",
-                       json={**CHECKOUT_BODY, "user_id": 999},
-                       headers=INTERNAL).status_code == 404
+    assert (
+        client.post(
+            "/internal/billing/checkout", json=CHECKOUT_BODY, headers={"X-Internal-Key": "wrong"}
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/internal/billing/checkout", json={**CHECKOUT_BODY, "user_id": 999}, headers=INTERNAL
+        ).status_code
+        == 404
+    )
     # a live key must be refused: the checkout is a demo by construction
     get_settings().stripe_secret_key = "sk_live_forbidden"
-    assert client.post("/internal/billing/checkout", json=CHECKOUT_BODY,
-                       headers=INTERNAL).status_code == 503
+    assert (
+        client.post("/internal/billing/checkout", json=CHECKOUT_BODY, headers=INTERNAL).status_code
+        == 503
+    )
     get_settings().stripe_secret_key = "sk_test_x"
     get_settings().stripe_price_id = None
-    assert client.post("/internal/billing/checkout", json=CHECKOUT_BODY,
-                       headers=INTERNAL).status_code == 503
+    assert (
+        client.post("/internal/billing/checkout", json=CHECKOUT_BODY, headers=INTERNAL).status_code
+        == 503
+    )
 
 
 def webhook(client, monkeypatch, event_type, obj):
     monkeypatch.setattr(
-        stripe.Webhook, "construct_event",
-        lambda payload, sig, secret: {"type": event_type,
-                                      "data": {"object": obj}},
+        stripe.Webhook,
+        "construct_event",
+        lambda payload, sig, secret: {"type": event_type, "data": {"object": obj}},
     )
-    return client.post("/webhooks/stripe", content=b"{}",
-                       headers={"Stripe-Signature": "sig"})
+    return client.post("/webhooks/stripe", content=b"{}", headers={"Stripe-Signature": "sig"})
 
 
 def test_webhook_checkout_completed_activates(client_and_db, monkeypatch):
     client, factory = client_and_db
-    res = webhook(client, monkeypatch, "checkout.session.completed",
-                  {"client_reference_id": "1", "customer": "cus_new"})
+    res = webhook(
+        client,
+        monkeypatch,
+        "checkout.session.completed",
+        {"client_reference_id": "1", "customer": "cus_new"},
+    )
     assert res.status_code == 200
     assert user_row(factory, 1) == ("cus_new", "active")
 
 
 def test_webhook_subscription_lifecycle(client_and_db, monkeypatch):
     client, factory = client_and_db
-    webhook(client, monkeypatch, "customer.subscription.updated",
-            {"customer": "cus_existing", "status": "past_due"})
+    webhook(
+        client,
+        monkeypatch,
+        "customer.subscription.updated",
+        {"customer": "cus_existing", "status": "past_due"},
+    )
     assert user_row(factory, 2) == ("cus_existing", "past_due")
-    webhook(client, monkeypatch, "customer.subscription.deleted",
-            {"customer": "cus_existing", "status": "canceled"})
+    webhook(
+        client,
+        monkeypatch,
+        "customer.subscription.deleted",
+        {"customer": "cus_existing", "status": "canceled"},
+    )
     assert user_row(factory, 2) == ("cus_existing", "canceled")
     # unknown customer and unhandled event types are acknowledged, not errors
-    assert webhook(client, monkeypatch, "customer.subscription.updated",
-                   {"customer": "cus_ghost", "status": "active"}).status_code == 200
+    assert (
+        webhook(
+            client,
+            monkeypatch,
+            "customer.subscription.updated",
+            {"customer": "cus_ghost", "status": "active"},
+        ).status_code
+        == 200
+    )
     assert webhook(client, monkeypatch, "invoice.paid", {}).status_code == 200
 
 
@@ -153,6 +195,5 @@ def test_webhook_rejects_bad_signature(client_and_db, monkeypatch):
         raise stripe.SignatureVerificationError("bad", sig)
 
     monkeypatch.setattr(stripe.Webhook, "construct_event", raise_bad)
-    res = client.post("/webhooks/stripe", content=b"{}",
-                      headers={"Stripe-Signature": "forged"})
+    res = client.post("/webhooks/stripe", content=b"{}", headers={"Stripe-Signature": "forged"})
     assert res.status_code == 400

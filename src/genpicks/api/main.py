@@ -16,7 +16,8 @@ Endpoints:
 """
 
 import math
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
+from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,9 +47,7 @@ app = FastAPI(title="GenPicks", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        origin.strip()
-        for origin in get_settings().cors_origins.split(",")
-        if origin.strip()
+        origin.strip() for origin in get_settings().cors_origins.split(",") if origin.strip()
     ],
     allow_methods=["GET"],
     allow_headers=["*"],
@@ -68,7 +67,7 @@ def _latest_h2h(session: Session, match_ids: list[int]) -> dict[int, list[Predic
         .where(Prediction.match_id.in_(match_ids), Prediction.market == MARKET_H2H)
         .order_by(Prediction.generated_at)
     )
-    latest: dict[tuple[int, int], Prediction] = {}
+    latest: dict[tuple[int, int | None], Prediction] = {}
     for p in rows:
         latest[(p.match_id, p.team_id)] = p
     grouped: dict[int, list[Prediction]] = {}
@@ -89,13 +88,13 @@ def _latest_market_odds(session: Session, match_ids: list[int]) -> dict[int, dic
             )
         )
     )
-    newest = {}
+    newest: dict[int | None, datetime] = {}
     for row in rows:
         if row.match_id not in newest or row.captured_at > newest[row.match_id]:
             newest[row.match_id] = row.captured_at
     out: dict[int, dict] = {}
     for row in rows:
-        if row.captured_at != newest[row.match_id] or row.team_id is None:
+        if row.match_id is None or row.team_id is None or row.captured_at != newest[row.match_id]:
             continue
         entry = out.setdefault(
             row.match_id, {"captured_at": row.captured_at.isoformat(), "teams": {}}
@@ -107,8 +106,11 @@ def _latest_market_odds(session: Session, match_ids: list[int]) -> dict[int, dic
                 "bookmaker": (row.raw or {}).get("title"),
             }
         entry["bookmakers"] = len(
-            {(r.raw or {}).get("bookmaker") for r in rows
-             if r.match_id == row.match_id and r.captured_at == newest[row.match_id]}
+            {
+                (r.raw or {}).get("bookmaker")
+                for r in rows
+                if r.match_id == row.match_id and r.captured_at == newest[row.match_id]
+            }
         )
     return out
 
@@ -124,9 +126,7 @@ def _sided_odds(odds: dict | None, match: Match) -> dict | None:
     }
 
 
-def _viewer_subscribed(
-    session: Session, internal_key: str | None, user_id: str | None
-) -> bool:
+def _viewer_subscribed(session: Session, internal_key: str | None, user_id: str | None) -> bool:
     if not is_internal(internal_key) or not user_id:
         return False
     try:
@@ -156,7 +156,7 @@ def sync_user(
     if user is None:
         user = User(
             github_id=payload.github_id,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         session.add(user)
     user.email = payload.email
@@ -184,8 +184,8 @@ def upcoming_matches(limit: int = 20, session: Session = Depends(get_session)):
             .limit(limit)
         )
     )
-    teams = {t.id: t.name for t in session.scalars(select(Team))}
-    venues = {v.id: v.name for v in session.scalars(select(Venue))}
+    teams: dict[int | None, str] = {t.id: t.name for t in session.scalars(select(Team))}
+    venues: dict[int | None, str] = {v.id: v.name for v in session.scalars(select(Venue))}
     h2h = _latest_h2h(session, [m.id for m in matches])
     market_odds = _latest_market_odds(session, [m.id for m in matches])
 
@@ -195,7 +195,7 @@ def upcoming_matches(limit: int = 20, session: Session = Depends(get_session)):
             "match_id": m.id,
             "season": m.season,
             "round": m.round,
-            "date": m.match_date.isoformat(),
+            "date": m.match_date.isoformat() if m.match_date else None,
             "kickoff_utc": m.kickoff_utc.isoformat() if m.kickoff_utc else None,
             "home_team": teams.get(m.home_team_id),
             "away_team": teams.get(m.away_team_id),
@@ -204,7 +204,7 @@ def upcoming_matches(limit: int = 20, session: Session = Depends(get_session)):
             "market_odds": _sided_odds(market_odds.get(m.id), m),
         }
         if m.id in h2h:
-            probs = {
+            probs: dict[str, Any] = {
                 ("home" if p.team_id == m.home_team_id else "away"): {
                     "probability": round(p.probability, 4),
                     "implied_odds": implied_odds(p.probability),
@@ -218,15 +218,18 @@ def upcoming_matches(limit: int = 20, session: Session = Depends(get_session)):
 
 
 @app.get("/matches/{match_id}/markets")
-def match_markets(match_id: int, top: int = 10,
-                  x_internal_key: str | None = Header(default=None),
-                  x_user_id: str | None = Header(default=None),
-                  session: Session = Depends(get_session)):
+def match_markets(
+    match_id: int,
+    top: int = 10,
+    x_internal_key: str | None = Header(default=None),
+    x_user_id: str | None = Header(default=None),
+    session: Session = Depends(get_session),
+):
     match = session.get(Match, match_id)
     if match is None:
         raise HTTPException(404, "match not found")
-    teams = {t.id: t.name for t in session.scalars(select(Team))}
-    players = {p.id: p.full_name for p in session.scalars(select(Player))}
+    teams: dict[int | None, str] = {t.id: t.name for t in session.scalars(select(Team))}
+    players: dict[int | None, str] = {p.id: p.full_name for p in session.scalars(select(Player))}
 
     predictions = list(
         session.scalars(
@@ -283,9 +286,7 @@ def match_markets(match_id: int, top: int = 10,
         "try_markets_locked": locked,
         # row counts let the locked panel say what the subscription unlocks
         "try_market_counts": {"anytime_try": len(anytime), "first_try": len(first)},
-        "market_odds": _sided_odds(
-            _latest_market_odds(session, [match_id]).get(match_id), match
-        ),
+        "market_odds": _sided_odds(_latest_market_odds(session, [match_id]).get(match_id), match),
         # "official": published team lists; "projected": each team's most
         # recent played lineup (team lists not out yet)
         "lineup_source": anytime_source or first_source,
@@ -315,14 +316,13 @@ def track_record(session: Session = Depends(get_session)):
     return {
         version: {
             "settled": len(pairs),
-            "accuracy": round(
-                sum((p > 0.5) == bool(y) for p, y in pairs) / len(pairs), 4
-            ),
+            "accuracy": round(sum((p > 0.5) == bool(y) for p, y in pairs) / len(pairs), 4),
             "log_loss": round(
                 -sum(
                     y * math.log(max(p, 1e-9)) + (1 - y) * math.log(max(1 - p, 1e-9))
                     for p, y in pairs
-                ) / len(pairs),
+                )
+                / len(pairs),
                 4,
             ),
         }

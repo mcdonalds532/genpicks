@@ -14,12 +14,12 @@ so requests are made here (never through Fetcher) and URLs are never logged.
 import json
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
 
-from genpicks.scrape.fetch import FetchError, USER_AGENT
+from genpicks.scrape.fetch import USER_AGENT, FetchError
 
 SOURCE = "oddsapi"
 SPORT_KEY = "rugbyleague_nrl"
@@ -41,7 +41,7 @@ def snapshot_cache_path(captured_at: datetime) -> str:
 
 
 def captured_at_from_path(path: Path) -> datetime:
-    return datetime.strptime(path.stem, _STAMP).replace(tzinfo=timezone.utc)
+    return datetime.strptime(path.stem, _STAMP).replace(tzinfo=UTC)
 
 
 @dataclass(frozen=True)
@@ -103,10 +103,8 @@ def poll(api_key: str, raw_root: Path) -> tuple[Path, int, int | None]:
         timeout=30.0,
     )
     if response.status_code != 200:
-        raise FetchError(
-            f"The Odds API returned {response.status_code}: {response.text[:200]}"
-        )
-    captured_at = datetime.now(timezone.utc)
+        raise FetchError(f"The Odds API returned {response.status_code}: {response.text[:200]}")
+    captured_at = datetime.now(UTC)
     target = raw_root / snapshot_cache_path(captured_at)
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_suffix(target.suffix + ".tmp")

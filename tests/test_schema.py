@@ -2,6 +2,7 @@
 
 import pytest
 from sqlalchemy import create_engine, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from genpicks.db.models import Base, Team, TeamAlias, Venue, VenueAlias
@@ -59,5 +60,5 @@ def test_team_alias_unique_per_source(session):
     session.add(TeamAlias(team_id=team.id, alias="Tigers", source="tab"))
     session.commit()
     session.add(TeamAlias(team_id=team.id, alias="Tigers", source="tab"))
-    with pytest.raises(Exception):
+    with pytest.raises(IntegrityError):
         session.commit()

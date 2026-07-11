@@ -129,17 +129,13 @@ def _resolve_team(session: Session, name: str) -> Team | None:
     slug = ODDSAPI_NAME_TO_RLP_SLUG.get(name)
     if slug is None:
         slug = next(
-            (
-                NICKNAME_TO_RLP_SLUG[nick]
-                for nick in _NICKNAMES
-                if nick in name
-            ),
+            (NICKNAME_TO_RLP_SLUG[nick] for nick in _NICKNAMES if nick in name),
             None,
         )
         if slug is not None:
             logger.warning(
-                "oddsapi team %r resolved by nickname only — add it to "
-                "ODDSAPI_NAME_TO_RLP_SLUG", name,
+                "oddsapi team %r resolved by nickname only — add it to ODDSAPI_NAME_TO_RLP_SLUG",
+                name,
             )
     if slug is None:
         logger.warning("no mapping for oddsapi team %r", name)
@@ -166,6 +162,7 @@ def _resolve_match(session: Session, event: OddsEvent) -> Match | None:
         return session.get(Match, known.match_id)
     if event.commence_time is None:
         return None
+    commence = event.commence_time
 
     home = _resolve_team(session, event.home_team)
     away = _resolve_team(session, event.away_team)
@@ -177,26 +174,26 @@ def _resolve_match(session: Session, event: OddsEvent) -> Match | None:
             m
             for m in session.scalars(
                 select(Match).where(
-                    Match.season == event.commence_time.year,
+                    Match.season == commence.year,
                     Match.home_team_id == home_id,
                     Match.away_team_id == away_id,
                 )
             )
-            if m.match_date is not None
-            and abs(m.match_date - event.commence_time.date()) <= timedelta(days=1)
+            if m.match_date is not None and abs(m.match_date - commence.date()) <= timedelta(days=1)
         ]
 
     candidates = find(home.id, away.id) or find(away.id, home.id)
     if len(candidates) != 1:
         logger.warning(
             "oddsapi event %s (%s v %s, %s): %d canonical candidates, skipping",
-            event.event_id, event.home_team, event.away_team,
-            event.commence_time, len(candidates),
+            event.event_id,
+            event.home_team,
+            event.away_team,
+            event.commence_time,
+            len(candidates),
         )
         return None
     match = candidates[0]
-    session.add(
-        MatchSourceKey(match_id=match.id, source=SOURCE, source_key=event.event_id)
-    )
+    session.add(MatchSourceKey(match_id=match.id, source=SOURCE, source_key=event.event_id))
     session.flush()
     return match

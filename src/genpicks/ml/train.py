@@ -19,6 +19,7 @@ import json
 import logging
 from datetime import date
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -95,7 +96,7 @@ def metrics(y_true: np.ndarray, prob: np.ndarray) -> dict:
 def calibration_table(y_true: np.ndarray, prob: np.ndarray, bins: int = 10) -> list:
     table = []
     edges = np.linspace(0, 1, bins + 1)
-    for lo, hi in zip(edges[:-1], edges[1:]):
+    for lo, hi in zip(edges[:-1], edges[1:], strict=True):
         mask = (prob >= lo) & (prob < hi if hi < 1 else prob <= hi)
         if mask.sum() >= 10:
             table.append(
@@ -134,8 +135,7 @@ def main(argv: list[str] | None = None) -> None:
         )
     }
     for name, frame in splits.items():
-        logger.info("%s: %d matches (%s)", name, len(frame),
-                    sorted(frame["season"].unique()))
+        logger.info("%s: %d matches (%s)", name, len(frame), sorted(frame["season"].unique()))
 
     def xy(frame):
         return frame[FEATURE_COLUMNS].astype(float), frame["home_win"].to_numpy()
@@ -199,7 +199,7 @@ def main(argv: list[str] | None = None) -> None:
         "feature_importance_gain": {
             k: round(v, 2)
             for k, v in sorted(
-                booster.get_score(importance_type="gain").items(),
+                cast(dict[str, float], booster.get_score(importance_type="gain")).items(),
                 key=lambda kv: -kv[1],
             )
         },

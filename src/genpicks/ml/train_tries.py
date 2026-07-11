@@ -22,9 +22,9 @@ import json
 import logging
 from datetime import date
 from pathlib import Path
+from typing import cast
 
 import numpy as np
-import pandas as pd
 import xgboost as xgb
 from sklearn.metrics import log_loss
 from sqlalchemy import create_engine
@@ -134,12 +134,10 @@ def main(argv: list[str] | None = None) -> None:
     shares = build_share_dataset(data, priors, fallback)
     lam_by_team = test_team.set_index(["match_id", "team_id"])["lam"].to_dict()
 
-    test_shares = shares[
-        shares["match_id"].isin(set(test_team["match_id"]))
-    ].copy()
+    test_shares = shares[shares["match_id"].isin(set(test_team["match_id"]))].copy()
     test_shares["lam"] = [
         lam_by_team.get((m, t), np.nan)
-        for m, t in zip(test_shares["match_id"], test_shares["team_id"])
+        for m, t in zip(test_shares["match_id"], test_shares["team_id"], strict=True)
     ]
     test_shares = test_shares[test_shares["lam"].notna()].copy()
 
@@ -152,8 +150,11 @@ def main(argv: list[str] | None = None) -> None:
     p_model = 1.0 - np.exp(-test_shares["lam"] * test_shares["share"])
     p_prior = 1.0 - np.exp(-test_shares["lam"] * test_shares["share_prior_only"])
     anytime_report = {
-        "model": {"log_loss": float(log_loss(y_any, p_model)),
-                  "base_rate": float(y_any.mean()), "n": int(len(y_any))},
+        "model": {
+            "log_loss": float(log_loss(y_any, p_model)),
+            "base_rate": float(y_any.mean()),
+            "n": int(len(y_any)),
+        },
         "position_prior_only": {"log_loss": float(log_loss(y_any, p_prior))},
         "reliability": [
             {
@@ -162,8 +163,7 @@ def main(argv: list[str] | None = None) -> None:
                 "predicted": float(p_model[mask].mean()),
                 "actual": float(y_any[mask].mean()),
             }
-            for lo, hi in [(0, 0.1), (0.1, 0.2), (0.2, 0.3), (0.3, 0.4),
-                           (0.4, 0.5), (0.5, 1.0)]
+            for lo, hi in [(0, 0.1), (0.1, 0.2), (0.2, 0.3), (0.3, 0.4), (0.4, 0.5), (0.5, 1.0)]
             if (mask := (p_model >= lo) & (p_model < hi)).sum() >= 30
         ],
     }
@@ -203,17 +203,21 @@ def main(argv: list[str] | None = None) -> None:
 
     report = {
         "model_version": f"try_scorer_v0.1_{date.today():%Y%m%d}",
-        "splits": {"train": sorted(train_seasons), "val": sorted(val_seasons),
-                   "test": sorted(test_seasons)},
+        "splits": {
+            "train": sorted(train_seasons),
+            "val": sorted(val_seasons),
+            "test": sorted(test_seasons),
+        },
         "team_try_rate_test": team_report,
         "anytime_try_test": anytime_report,
         "first_try_test": first_report,
-        "position_priors": {k: round(v, 4) for k, v in sorted(
-            priors.items(), key=lambda kv: -kv[1])},
+        "position_priors": {
+            k: round(v, 4) for k, v in sorted(priors.items(), key=lambda kv: -kv[1])
+        },
         "feature_importance_gain": {
             k: round(v, 2)
             for k, v in sorted(
-                booster.get_score(importance_type="gain").items(),
+                cast(dict[str, float], booster.get_score(importance_type="gain")).items(),
                 key=lambda kv: -kv[1],
             )
         },

@@ -22,26 +22,59 @@ def engine():
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     with Session(engine) as session:
-        session.add_all([Team(id=1, name="Alpha"), Team(id=2, name="Beta"),
-                         Team(id=3, name="Gamma")])
+        session.add_all(
+            [Team(id=1, name="Alpha"), Team(id=2, name="Beta"), Team(id=3, name="Gamma")]
+        )
         session.add_all(
             [
                 # round 1: Alpha beats Beta 20-10
-                Match(season=2024, round="1", match_date=date(2024, 3, 1),
-                      home_team_id=1, away_team_id=2, home_score=20, away_score=10,
-                      source="t", source_key="m1"),
+                Match(
+                    season=2024,
+                    round="1",
+                    match_date=date(2024, 3, 1),
+                    home_team_id=1,
+                    away_team_id=2,
+                    home_score=20,
+                    away_score=10,
+                    source="t",
+                    source_key="m1",
+                ),
                 # round 2: Beta hosts Gamma six days later
-                Match(season=2024, round="2", match_date=date(2024, 3, 7),
-                      home_team_id=2, away_team_id=3, home_score=10, away_score=10,
-                      source="t", source_key="m2"),
+                Match(
+                    season=2024,
+                    round="2",
+                    match_date=date(2024, 3, 7),
+                    home_team_id=2,
+                    away_team_id=3,
+                    home_score=10,
+                    away_score=10,
+                    source="t",
+                    source_key="m2",
+                ),
                 # round 3: Alpha hosts Gamma eight days after its round-1 game
-                Match(season=2024, round="3", match_date=date(2024, 3, 9),
-                      home_team_id=1, away_team_id=3, home_score=30, away_score=0,
-                      source="t", source_key="m3"),
+                Match(
+                    season=2024,
+                    round="3",
+                    match_date=date(2024, 3, 9),
+                    home_team_id=1,
+                    away_team_id=3,
+                    home_score=30,
+                    away_score=0,
+                    source="t",
+                    source_key="m3",
+                ),
                 # next season: GF label, Alpha v Beta
-                Match(season=2025, round="GF", match_date=date(2025, 10, 5),
-                      home_team_id=1, away_team_id=2, home_score=12, away_score=13,
-                      source="t", source_key="m4"),
+                Match(
+                    season=2025,
+                    round="GF",
+                    match_date=date(2025, 10, 5),
+                    home_team_id=1,
+                    away_team_id=2,
+                    home_score=12,
+                    away_score=13,
+                    source="t",
+                    source_key="m4",
+                ),
             ]
         )
         session.commit()
@@ -95,7 +128,8 @@ def test_draws_emit_null_target_but_update_form(engine):
     # elo regressed one third toward the mean between seasons
     assert abs(gf["home_elo"] - ELO_INITIAL) < abs(
         data[data["round_number"] == 3].iloc[0]["home_elo"]
-        + ELO_K - ELO_INITIAL  # loose bound: just closer to mean than before
+        + ELO_K
+        - ELO_INITIAL  # loose bound: just closer to mean than before
     )
 
 

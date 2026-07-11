@@ -33,8 +33,7 @@ JSON_HEADERS = {"Accept": "application/json"}
 
 def draw_url(season: int, round_number: int) -> str:
     return (
-        f"{BASE_URL}/draw/data?competition={COMPETITION_NRL}"
-        f"&season={season}&round={round_number}"
+        f"{BASE_URL}/draw/data?competition={COMPETITION_NRL}&season={season}&round={round_number}"
     )
 
 
@@ -47,7 +46,7 @@ def match_data_url(match_centre_path: str) -> str:
 
 
 def match_cache_path(match_centre_path: str) -> str:
-    """"/draw/nrl-premiership/2016/round-1/eels-v-broncos/" ->
+    """ "/draw/nrl-premiership/2016/round-1/eels-v-broncos/" ->
     "nrl/matches/2016/round-1/eels-v-broncos.json"."""
     m = re.search(r"/(\d{4})/([^/]+)/([^/]+)/?$", match_centre_path)
     if m is None:
@@ -59,9 +58,7 @@ def teamlist_cache_path(match_centre_path: str) -> str:
     """Pre-match snapshot of the same endpoint as match_cache_path, stored
     apart from it: the pre-game payload (squads, no stats/timeline) must never
     sit where the played-match ingest expects full-time data."""
-    return match_cache_path(match_centre_path).replace(
-        "nrl/matches/", "nrl/teamlists/", 1
-    )
+    return match_cache_path(match_centre_path).replace("nrl/matches/", "nrl/teamlists/", 1)
 
 
 # --------------------------------------------------------------------------
@@ -98,11 +95,7 @@ class DrawPage:
 
 def parse_draw(raw_json: str) -> DrawPage:
     data = json.loads(raw_json)
-    fixtures = [
-        _parse_fixture(f)
-        for f in data.get("fixtures", [])
-        if f.get("type") == "Match"
-    ]
+    fixtures = [_parse_fixture(f) for f in data.get("fixtures", []) if f.get("type") == "Match"]
     round_numbers = sorted(
         value
         for item in data.get("filterRounds", [])

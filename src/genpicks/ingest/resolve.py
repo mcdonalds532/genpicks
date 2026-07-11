@@ -71,9 +71,7 @@ class Resolver:
             self._ensure_alias(Team, TeamAlias, "team_id", team.id, display_name)
         return team
 
-    def venue(
-        self, source_id: str, display_name: str | None, city: str | None = None
-    ) -> Venue:
+    def venue(self, source_id: str, display_name: str | None, city: str | None = None) -> Venue:
         venue = self._resolve(Venue, VenueAlias, "venue_id", source_id)
         if venue is None:
             name = display_name or f"{self.source} venue {source_id}"
@@ -111,9 +109,7 @@ class Resolver:
         key = (entity_cls, alias)
         if key not in self._cache:
             row = self.session.scalar(
-                select(alias_cls).where(
-                    alias_cls.source == self.source, alias_cls.alias == alias
-                )
+                select(alias_cls).where(alias_cls.source == self.source, alias_cls.alias == alias)
             )
             if row is None:
                 return None
@@ -123,9 +119,7 @@ class Resolver:
     def _record_alias(
         self, entity_cls, alias_cls, fk_name: str, entity_id: int, alias: str
     ) -> None:
-        self.session.add(
-            alias_cls(**{fk_name: entity_id, "alias": alias, "source": self.source})
-        )
+        self.session.add(alias_cls(**{fk_name: entity_id, "alias": alias, "source": self.source}))
         self.session.flush()
         self._cache[(entity_cls, alias)] = entity_id
 
@@ -136,9 +130,7 @@ class Resolver:
         if (entity_cls, alias) in self._cache:
             return
         existing = self.session.scalar(
-            select(alias_cls).where(
-                alias_cls.source == self.source, alias_cls.alias == alias
-            )
+            select(alias_cls).where(alias_cls.source == self.source, alias_cls.alias == alias)
         )
         if existing is None:
             self._record_alias(entity_cls, alias_cls, fk_name, entity_id, alias)
