@@ -91,6 +91,17 @@ def client():
         )
         session.add_all(
             [
+                # stale projected h2h generation, superseded below: readers
+                # (markets and track record alike) must use only the newest
+                Prediction(
+                    model_version="v_test",
+                    match_id=1,
+                    market="h2h",
+                    team_id=1,
+                    probability=0.2,
+                    generated_at=now - timedelta(days=2),
+                    lineup_source="projected",
+                ),
                 Prediction(
                     model_version="v_test",
                     match_id=1,
@@ -98,6 +109,7 @@ def client():
                     team_id=1,
                     probability=0.7,
                     generated_at=now,
+                    lineup_source="official",
                 ),
                 Prediction(
                     model_version="v_test",
@@ -340,3 +352,11 @@ def test_track_record_scores_settled_predictions(client):
     assert body["v_test"]["settled"] == 1
     assert body["v_test"]["accuracy"] == 1.0
     assert 0 < body["v_test"]["log_loss"] < 1
+
+
+def test_track_record_counts_superseded_generations_once(client):
+    # match 1 has a stale projected h2h generation (0.2) superseded by the
+    # official one (0.7): it settles once, on the newest probability
+    body = client.get("/track-record").json()
+    assert body["v_test"]["settled"] == 1
+    assert body["v_test"]["accuracy"] == 1.0

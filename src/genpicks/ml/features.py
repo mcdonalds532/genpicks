@@ -12,6 +12,10 @@ One row per played match, features strictly pre-match:
 - travel: city-level km from each team's home city to the venue (diff),
   plus whether the nominal home side is on its own patch (Vegas and other
   neutral grounds erode the home advantage the Elo term assumes)
+- lineup availability: share of the previous match's side returning, and
+  share of the team's recent regulars in today's lineup — the actual 17
+  for played matches, the official team list for upcoming ones (the same
+  information a bettor has from Tuesday)
 
 Draws (rare in the NRL) keep Elo/form updates at 0.5 but rows are emitted
 with home_win None so the caller decides how to treat them.
@@ -26,7 +30,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-from genpicks.db.models import Match, Team, Venue
+from genpicks.db.models import Match, PlayerMatchStats, Team, TeamListEntry, Venue
 from genpicks.ml.geo import METRO_KM, travel_km
 
 ELO_INITIAL = 1500.0
@@ -45,6 +49,42 @@ class _TeamState:
     season_games: int = 0
     last_match_date: object = None  # datetime.date
     last_season: int | None = None
+    # lineup history persists across the offseason on purpose: a season
+    # opener against last year's final lineup measures roster continuity,
+    # and a regular who left over summer is exactly a missing regular
+    last_lineup: set[int] | None = None
+    lineup_history: deque = field(default_factory=lambda: deque(maxlen=10))
+
+
+MIN_LINEUP = 13  # fewer resolved players than this = not a usable lineup
+REGULAR_SHARE = 0.6  # in >=60% of the last 10 lineups = a regular
+MIN_LINEUP_HISTORY = 5  # games before "regulars" means anything
+
+
+def _availability(state: _TeamState, lineup: set[int] | None, prefix: str) -> dict:
+    """Pre-match lineup features: who is playing, of those who usually do.
+
+    `lineup` is the actual 17 for played matches (training) and the official
+    team list for upcoming ones (serving) — the same information a bettor has
+    from Tuesday. NaN when no usable lineup exists; XGBoost handles missing.
+    """
+    row = {f"{prefix}_returning_share": math.nan, f"{prefix}_regulars_available": math.nan}
+    if lineup is None or len(lineup) < MIN_LINEUP:
+        return row
+    if state.last_lineup:
+        row[f"{prefix}_returning_share"] = len(lineup & state.last_lineup) / len(
+            state.last_lineup
+        )
+    if len(state.lineup_history) >= MIN_LINEUP_HISTORY:
+        threshold = REGULAR_SHARE * len(state.lineup_history)
+        counts: dict[int, int] = {}
+        for past in state.lineup_history:
+            for player_id in past:
+                counts[player_id] = counts.get(player_id, 0) + 1
+        regulars = {player_id for player_id, n in counts.items() if n >= threshold}
+        if regulars:
+            row[f"{prefix}_regulars_available"] = len(lineup & regulars) / len(regulars)
+    return row
 
 
 def _round_number(round_label: str, last_regular: int = 27) -> int:
@@ -119,6 +159,34 @@ def build_match_dataset(engine: Engine, include_unplayed: bool = False) -> pd.Da
         team_names = dict(session.execute(select(Team.id, Team.name)).tuples().all())
         venue_cities = dict(session.execute(select(Venue.id, Venue.city)).tuples().all())
 
+        # played lineups: everyone who took the field or sat an unused bench
+        # spot (minutes stays NULL on old RLP-only rows; 0 marks junk reserve
+        # rows from early loader versions, never a real appearance)
+        lineups: dict[tuple[int, int], set[int]] = {}
+        for match_id, team_id, player_id in session.execute(
+            select(
+                PlayerMatchStats.match_id, PlayerMatchStats.team_id, PlayerMatchStats.player_id
+            ).where(
+                (PlayerMatchStats.minutes_played.is_(None))
+                | (PlayerMatchStats.minutes_played > 0)
+            )
+        ):
+            lineups.setdefault((match_id, team_id), set()).add(player_id)
+
+        if include_unplayed:
+            # official team lists stand in for unplayed fixtures: jerseys 1-17
+            # are the matchday side, unresolved debutants are simply absent
+            for match_id, team_id, player_id in session.execute(
+                select(TeamListEntry.match_id, TeamListEntry.team_id, TeamListEntry.player_id)
+                .join(Match, Match.id == TeamListEntry.match_id)
+                .where(
+                    Match.home_score.is_(None),
+                    TeamListEntry.player_id.is_not(None),
+                    TeamListEntry.jersey_number <= 17,
+                )
+            ):
+                lineups.setdefault((match_id, team_id), set()).add(player_id)
+
     states: dict[int, _TeamState] = {}
     rows = []
     for match in matches:
@@ -156,6 +224,10 @@ def build_match_dataset(engine: Engine, include_unplayed: bool = False) -> pd.Da
         row["home_at_home"] = (
             math.nan if math.isnan(home_travel) else float(home_travel <= METRO_KM)
         )
+        home_lineup = lineups.get((match.id, match.home_team_id))
+        away_lineup = lineups.get((match.id, match.away_team_id))
+        row.update(_availability(home, home_lineup, "home"))
+        row.update(_availability(away, away_lineup, "away"))
         row.update(_snapshot(home, "home", match.match_date, match.season))
         row.update(_snapshot(away, "away", match.match_date, match.season))
         row["elo_diff"] = home.elo - away.elo
@@ -182,6 +254,10 @@ def build_match_dataset(engine: Engine, include_unplayed: bool = False) -> pd.Da
         away.season_games += 1
         home.last_match_date = away.last_match_date = match.match_date
         home.last_season = away.last_season = match.season
+        for state, lineup in ((home, home_lineup), (away, away_lineup)):
+            if lineup is not None and len(lineup) >= MIN_LINEUP:
+                state.last_lineup = lineup
+                state.lineup_history.append(lineup)
 
     data = pd.DataFrame(rows)
     # Home-minus-away differences: half the width, less collinearity. With
@@ -196,6 +272,8 @@ def build_match_dataset(engine: Engine, include_unplayed: bool = False) -> pd.Da
         "margin_10",
         "points_for_5",
         "points_against_5",
+        "returning_share",
+        "regulars_available",
     ):
         data[f"{name}_diff"] = data[f"home_{name}"] - data[f"away_{name}"]
     return data
@@ -218,4 +296,9 @@ FEATURE_COLUMNS = [
     # loss 0.6384 vs 0.6397 without, improvement stable across seeds
     "travel_km_diff",
     "home_at_home",
+    # lineup availability: kept after walk-forward A/B — improved pooled log
+    # loss on all 5 seeds tried (mean -0.0028), biggest gains in 2025/2026
+    # where official team lists also feed the serving path
+    "returning_share_diff",
+    "regulars_available_diff",
 ]

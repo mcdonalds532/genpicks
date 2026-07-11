@@ -9,13 +9,15 @@ data/models/, scores every unplayed fixture, and appends rows to the
 predictions table (append-only by design: a (model_version, match, market)
 combination is written at most once, so re-runs only add what's missing).
 
-Lineups for the try markets come from ingested official team lists when a
-match has them for both sides (lineup_source="official"); otherwise they are
-projected from each team's most recent played match ("projected"). A
-projected generation is superseded by appending an official one once team
-lists arrive — rows are never updated — and readers take the newest
-generation per market. First-try probabilities are conditional on a try
-being scored and normalised per match.
+Lineups come from ingested official team lists when a match has them for
+both sides (lineup_source="official"); otherwise they are projected from
+each team's most recent played match ("projected"). A projected generation
+is superseded by appending an official one once team lists arrive — rows
+are never updated — and readers take the newest generation per market. This
+lifecycle covers every market: the try markets score the lineup directly,
+and the match-winner uses lineup availability features, so its probability
+also sharpens when team lists land. First-try probabilities are conditional
+on a try being scored and normalised per match.
 """
 
 import argparse
@@ -57,16 +59,6 @@ def latest_model_dir(models_root: Path, prefix: str) -> Path:
     return dirs[-1]
 
 
-def existing_keys(session: Session, model_version: str) -> set[tuple[int, str]]:
-    return set(
-        session.execute(
-            select(Prediction.match_id, Prediction.market).where(
-                Prediction.model_version == model_version
-            )
-        ).tuples()
-    )
-
-
 def predict_h2h(session, engine, models_root: Path, upcoming_ids: set[int]) -> int:
     model_dir = latest_model_dir(models_root, "match_winner_")
     report = json.loads((model_dir / "report.json").read_text(encoding="utf-8"))
@@ -85,11 +77,21 @@ def predict_h2h(session, engine, models_root: Path, upcoming_ids: set[int]) -> i
     logit = np.log(np.clip(raw, 1e-6, 1 - 1e-6) / (1 - np.clip(raw, 1e-6, 1 - 1e-6)))
     prob_home = 1.0 / (1.0 + np.exp(-(platt["coef"] * logit + platt["intercept"])))
 
-    done = existing_keys(session, version)
+    # h2h follows the same generation lifecycle as the try markets: lineup
+    # availability is a model feature now, so a projected generation (no
+    # team lists yet) is superseded by an official one, which is final
+    newest = newest_generation(session, version, MARKET_H2H)
+    official = official_lineups(session, upcoming_ids)
     now = datetime.now(UTC)
-    written = 0
+    written = {"official": 0, "projected": 0}
     for row, p in zip(rows.itertuples(), prob_home, strict=True):
-        if (row.match_id, MARKET_H2H) in done:
+        basis = (
+            "official"
+            if (row.match_id, row.home_team_id) in official
+            and (row.match_id, row.away_team_id) in official
+            else "projected"
+        )
+        if newest.get(row.match_id) in (basis, "official"):
             continue
         for team_id, prob in ((row.home_team_id, float(p)), (row.away_team_id, float(1 - p))):
             session.add(
@@ -100,11 +102,17 @@ def predict_h2h(session, engine, models_root: Path, upcoming_ids: set[int]) -> i
                     team_id=team_id,
                     probability=prob,
                     generated_at=now,
+                    lineup_source=basis,
                 )
             )
-        written += 1
-    logger.info("h2h (%s): %d matches written", version, written)
-    return written
+        written[basis] += 1
+    logger.info(
+        "h2h (%s): %d matches written from official lists, %d projected",
+        version,
+        written["official"],
+        written["projected"],
+    )
+    return sum(written.values())
 
 
 def official_lineups(
@@ -132,18 +140,23 @@ def official_lineups(
     return {key: lineup for key, lineup in lineups.items() if len(lineup) >= 13}
 
 
-def newest_try_generation(session: Session, model_version: str) -> dict[int, str | None]:
-    """match_id -> lineup_source of the newest try-market generation."""
-    newest: dict[int, str | None] = {}
+def newest_generation(session: Session, model_version: str, market: str) -> dict[int, str]:
+    """match_id -> lineup_source of the newest generation for a market.
+
+    Legacy rows written before h2h carried a lineup_source count as
+    "projected", so they are superseded once, by an official generation,
+    never re-duplicated by re-runs.
+    """
+    newest: dict[int, str] = {}
     for match_id, lineup_source in session.execute(
         select(Prediction.match_id, Prediction.lineup_source)
         .where(
             Prediction.model_version == model_version,
-            Prediction.market == MARKET_ANYTIME_TRY,
+            Prediction.market == market,
         )
         .order_by(Prediction.generated_at)
     ):
-        newest[match_id] = lineup_source
+        newest[match_id] = lineup_source or "projected"
     return newest
 
 
@@ -175,7 +188,7 @@ def predict_tries(session, engine, models_root: Path, upcoming_ids: set[int]) ->
         last_match[match.home_team_id] = match.match_id
         last_match[match.away_team_id] = match.match_id
 
-    newest = newest_try_generation(session, version)
+    newest = newest_generation(session, version, MARKET_ANYTIME_TRY)
     official = official_lineups(session, upcoming_ids)
     now = datetime.now(UTC)
     lam_sum = team_rows.groupby("match_id")["lam"].sum().to_dict()
@@ -189,8 +202,7 @@ def predict_tries(session, engine, models_root: Path, upcoming_ids: set[int]) ->
         )
         # a projected generation is superseded once official lists arrive;
         # an official one is final, and re-runs never duplicate a basis
-        prev = newest.get(match_id, "none")
-        if prev in (basis, "official"):
+        if newest.get(match_id) in (basis, "official"):
             continue
         entries = []  # (team_id, player_id, share, lam)
         for team in group.itertuples():

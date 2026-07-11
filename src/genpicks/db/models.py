@@ -304,8 +304,10 @@ class Prediction(Base):
     player_id: Mapped[int | None] = mapped_column(ForeignKey("players.id"))
     probability: Mapped[float] = mapped_column(Float)
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    # which lineup the try markets were computed from: "projected" (last
-    # played match) or "official" (ingested team list); null for h2h.
-    # A projected generation is superseded — by appending, never updating —
-    # once the official list arrives; readers take the newest generation.
+    # which lineup this generation was computed from: "projected" (last
+    # played match) or "official" (ingested team list); null on h2h rows
+    # written before availability became a model feature (reads as
+    # projected). A projected generation is superseded — by appending,
+    # never updating — once the official list arrives; readers take the
+    # newest generation.
     lineup_source: Mapped[str | None] = mapped_column(String(20))

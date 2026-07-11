@@ -14,7 +14,7 @@ from genpicks.db.models import (
     Team,
     TeamListEntry,
 )
-from genpicks.ml.predict import newest_try_generation, official_lineups
+from genpicks.ml.predict import newest_generation, official_lineups
 
 NOW = datetime.now(UTC)
 
@@ -74,7 +74,7 @@ def test_official_lineups_take_the_matchday_17_and_need_13_resolved(session):
     assert all(pos == "Wing" for _, pos in lineups[(1, 1)])
 
 
-def test_newest_try_generation_reports_latest_lineup_source(session):
+def test_newest_generation_reports_latest_lineup_source(session):
     session.add_all(
         [
             Prediction(
@@ -101,5 +101,24 @@ def test_newest_try_generation_reports_latest_lineup_source(session):
     )
     session.flush()
 
-    assert newest_try_generation(session, "v") == {1: "official"}
-    assert newest_try_generation(session, "other") == {}
+    assert newest_generation(session, "v", "anytime_try") == {1: "official"}
+    assert newest_generation(session, "other", "anytime_try") == {}
+
+
+def test_newest_generation_treats_legacy_null_source_as_projected(session):
+    # h2h rows written before availability features carried no lineup_source;
+    # they must read as projected so the official pass supersedes them once
+    session.add(
+        Prediction(
+            model_version="v",
+            match_id=1,
+            market="h2h",
+            team_id=1,
+            probability=0.6,
+            generated_at=NOW - timedelta(days=1),
+            lineup_source=None,
+        )
+    )
+    session.flush()
+
+    assert newest_generation(session, "v", "h2h") == {1: "projected"}

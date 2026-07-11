@@ -305,10 +305,17 @@ def track_record(session: Session = Depends(get_session)):
             Match.home_score.is_not(None),
         )
     ).all()
-    by_version: dict[str, list[tuple[float, int]]] = {}
+    # newest generation only: a projected h2h prediction superseded by an
+    # official-lineup one must not double-count the match
+    newest: dict[tuple[str, int], tuple] = {}
     for prediction, match in rows:
         if match.home_score == match.away_score:
             continue
+        key = (prediction.model_version, prediction.match_id)
+        if key not in newest or prediction.generated_at > newest[key][0].generated_at:
+            newest[key] = (prediction, match)
+    by_version: dict[str, list[tuple[float, int]]] = {}
+    for prediction, match in newest.values():
         outcome = int(match.home_score > match.away_score)
         by_version.setdefault(prediction.model_version, []).append(
             (prediction.probability, outcome)
