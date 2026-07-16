@@ -1,0 +1,27 @@
+# Keep the free-tier Render API instance awake so visitors don't sit
+# through its ~60s cold start. Render spins the instance down after ~15
+# idle minutes; a ping every 10 keeps it up. One always-on instance uses
+# ~730 of the free tier's 750 monthly instance hours, which is fine while
+# the API is the only Render service.
+#
+# The ping deliberately hits /health, which never touches the database:
+# Neon's autosuspend wake is ~1s (not worth burning its free compute
+# hours to avoid), while Render's cold start is the one visitors notice.
+#
+# GitHub cron can lag several minutes under load, so the occasional gap
+# past 15 minutes still happens — the generous --max-time lets the ping
+# itself absorb that cold start instead of failing on it.
+name: keep-warm
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping API health endpoint
+        run: curl --fail --silent --show-error --max-time 120 https://genpicks-api.onrender.com/health

@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from genpicks.api.billing import router as billing_router
 from genpicks.api.deps import get_session, is_internal
+from genpicks.api.observability import setup_observability
 from genpicks.config import get_settings
 from genpicks.db.models import (
     MARKET_ANYTIME_TRY,
@@ -44,6 +45,7 @@ from genpicks.db.models import (
 LIVE_ODDS_SOURCE = "oddsapi"
 
 app = FastAPI(title="GenPicks", version="0.1.0")
+setup_observability(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[

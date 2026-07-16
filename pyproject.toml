@@ -23,6 +23,7 @@ dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
     "stripe>=10",
+    "sentry-sdk[fastapi]>=2",
 ]
 
 [project.optional-dependencies]

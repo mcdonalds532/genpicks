@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     stripe_webhook_secret: str | None = None
     # price id of the recurring GenPicks Pro test product
     stripe_price_id: str | None = None
+    # Sentry DSN for API error reporting; unset (the default) means errors
+    # are only logged, and no Sentry SDK network calls are made
+    sentry_dsn: str | None = None
 
 
 @lru_cache

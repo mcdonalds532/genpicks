@@ -143,6 +143,7 @@ cd web; npm install; npm run dev
 | API | Render (free tier, Docker) | `Dockerfile` at repo root; serving-only image, honors `$PORT`; needs `GENPICKS_DATABASE_URL` |
 | Database | Neon Postgres (Sydney) | seeded once via `pg_dump`/`pg_restore` from a fully-ingested local Postgres |
 | Refresh | GitHub Actions | `.github/workflows/weekly-refresh.yml` |
+| Keep-warm | GitHub Actions | `.github/workflows/keep-warm.yml` pings `/health` every 10 min |
 
 The weekly workflow runs Monday 22:00 UTC (settles the finished round's
 results) and Wednesday 22:00 UTC (official team lists + fresh odds), then
@@ -153,8 +154,16 @@ artifacts are committed to the repo (< 1 MB per version), so CI scoring
 loads them straight from checkout — training stays a local, deliberate act.
 
 Free-tier trade-off: the Render instance sleeps after ~15 minutes idle and
-cold-starts in under a minute; the first page load after a quiet period is
-slow while the API wakes.
+cold-starts in under a minute. The keep-warm workflow pings `/health` every
+10 minutes to absorb that (one always-on instance fits inside the free
+tier's 750 monthly hours); GitHub cron can lag, so the occasional slow
+first load still happens.
+
+The API logs one JSON line per request (method, path, status, duration)
+and routes uvicorn's own output through the same formatter, so Render's
+log stream is uniformly parseable. Setting `GENPICKS_SENTRY_DSN` in the
+API environment turns on Sentry error reporting; unset, errors still land
+in the logs with full tracebacks.
 
 ## Accounts and the demo paywall
 
