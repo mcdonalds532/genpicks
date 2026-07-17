@@ -70,7 +70,11 @@ flowchart LR
   schema in `src/genpicks/db/models.py`, migrations via Alembic. Teams,
   venues, and players each have alias tables so differently-named source
   records (sponsor renames, "J. Tedesco" vs "James Tedesco") resolve to one
-  canonical entity.
+  canonical entity. Making four sources agree took real work —
+  [docs/data-quality.md](docs/data-quality.md) collects the war stories
+  (three sources, three try counts; the player who became two people; the
+  stadium that keeps changing its name) and the loader rules they turned
+  into.
 - **Models** (XGBoost / Poisson): match winner, team try rates, player try
   share; calibrated probabilities benchmarked against bookmaker closing odds.
   Match-winner features cover Elo, form, rest, city-level travel, and lineup
