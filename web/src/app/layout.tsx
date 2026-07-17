@@ -15,6 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  // Absolute base for OG/twitter image URLs when pages are shared.
+  metadataBase: new URL("https://genpicks.vercel.app"),
   title: "GenPicks — NRL predictions",
   description:
     "Machine-learning win probabilities and try-scorer markets for the NRL, with implied odds and a public track record.",

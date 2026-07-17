@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import Link from "next/link";
 import { CalibrationChart } from "@/components/calibration-chart";
 import { CumulativeLossChart } from "@/components/cumulative-loss-chart";
 import backtestJson from "@/data/backtest.json";
@@ -6,11 +8,18 @@ import {
   type Backtest,
   calibrationBins,
   cumulativeLoss,
+  overallAccuracy,
   perSeason,
   seasonStarts,
 } from "@/lib/backtest";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Track record — GenPicks",
+  description:
+    "GenPicks backtest and live record: log loss versus bookmaker closing odds, calibration, and season-by-season results on held-out NRL seasons.",
+};
 
 const backtest = backtestJson as Backtest;
 
@@ -49,7 +58,7 @@ export default async function TrackRecordPage() {
   const bins = calibrationBins(backtest.matches);
   const seasonStats = perSeason(backtest.matches);
   const last = points[points.length - 1];
-  const gap = last.model - last.market;
+  const accuracy = overallAccuracy(backtest.matches);
 
   // Table twin for the cumulative chart: checkpoints, not all 557 rows.
   const checkpoints = points.filter(
@@ -91,16 +100,25 @@ export default async function TrackRecordPage() {
             note="same matches, de-vigged"
           />
           <StatTile
-            label="Gap to the market"
-            value={`+${fmt(gap)}`}
-            note="closing odds are the strongest public benchmark"
+            label="Winner accuracy"
+            value={pct(accuracy.model)}
+            note={`bookmakers ${pct(accuracy.market)} on the same matches`}
           />
         </div>
+        {/* The direction words ("level with", "ahead of") are claims about
+            the committed backtest — re-check them, with the methodology
+            page and the responsible-gambling page, on every retrain. */}
         <p className="mb-6 max-w-prose text-sm text-ink-2">
           Bookmakers set closing prices with team news, market moves and
-          sharp money; a solo-project model that lands within{" "}
-          {fmt(gap)} of them — and clearly ahead of a coin flip — is doing
-          real predictive work from public box scores alone.
+          sharp money — the strongest public benchmark there is. On these{" "}
+          {last.n} held-out matches the model is level with that benchmark
+          on log loss and ahead of it on picking winners, from public box
+          scores alone. One fixed split can flatter, so the{" "}
+          <Link href="/methodology" className="underline">
+            methodology page
+          </Link>{" "}
+          also reports the same model validated walk-forward, season by
+          season.
         </p>
 
         <div className="mb-6 rounded-lg border border-hairline bg-surface p-4">
@@ -220,7 +238,8 @@ export default async function TrackRecordPage() {
         </p>
         {record === null ? (
           <p className="text-sm text-muted">
-            The prediction API is not reachable.
+            The live record is temporarily unavailable — the prediction API
+            is not responding. Try refreshing in a minute.
           </p>
         ) : Object.keys(record).length === 0 ? (
           <p className="text-sm text-muted">

@@ -7,7 +7,9 @@ export const metadata: Metadata = {
 };
 
 // Fully static: no data, no API dependency — this page must render even
-// when the prediction API is down.
+// when the prediction API is down. The model-vs-market sentence below is
+// a claim about the published track record — keep it in step with the
+// track-record and methodology pages whenever the model retrains.
 export default function ResponsibleGamblingPage() {
   return (
     <div className="max-w-prose">
@@ -32,9 +34,10 @@ export default function ResponsibleGamblingPage() {
         <p className="text-sm text-ink-2">
           Bookmaker prices shown alongside are collected periodically from
           third parties and may be stale or wrong by the time you read them.
-          Our own public track record shows the model trailing the closing
-          market on log loss — meaning that even a well-built model does not
-          beat the bookmakers&apos; prices, and neither should you expect to.
+          Our own public track record shows that even a carefully built
+          model does no better than match the closing market&apos;s log loss
+          — the bookmakers&apos; prices are extremely hard to beat, and you
+          should not expect to.
         </p>
       </section>
 

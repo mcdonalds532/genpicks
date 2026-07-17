@@ -85,8 +85,14 @@ export function CumulativeLossChart({
         onPointerMove={(e) => setActive(indexFromPointer(e.clientX))}
         onPointerLeave={() => setActive(null)}
         onKeyDown={(e) => {
-          if (e.key === "ArrowLeft") (e.preventDefault(), move(-1));
-          if (e.key === "ArrowRight") (e.preventDefault(), move(1));
+          if (e.key === "ArrowLeft") {
+            e.preventDefault();
+            move(-1);
+          }
+          if (e.key === "ArrowRight") {
+            e.preventDefault();
+            move(1);
+          }
           if (e.key === "Escape") setActive(null);
         }}
         onFocus={() => setActive((v) => v ?? points.length - 1)}

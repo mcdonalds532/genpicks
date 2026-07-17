@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { auth, signIn } from "@/auth";
@@ -14,6 +15,23 @@ import { MarketOddsLine } from "@/components/market-odds";
 import { ProbBar } from "@/components/prob-bar";
 
 export const dynamic = "force-dynamic";
+
+// The identical getMatchMarkets fetch below in the page body is memoized
+// by Next within the request, so the title costs no extra API call.
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const session = await auth();
+  const markets = await getMatchMarkets(id, session?.genpicksUserId);
+  if (!markets?.home_team || !markets?.away_team) return {};
+  return {
+    title: `${markets.home_team} v ${markets.away_team} — GenPicks`,
+    description: `Model win probabilities, implied odds, and player try-scorer markets for ${markets.home_team} v ${markets.away_team}.`,
+  };
+}
 
 // Ranked single-measure table: the in-row bar is magnitude, so it uses one
 // hue (not per-row colors); length is scaled to the table's top entry and

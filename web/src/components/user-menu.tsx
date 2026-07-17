@@ -27,8 +27,7 @@ export async function UserMenu() {
   return (
     <div className="ml-auto flex items-center gap-2.5">
       {session.user.image && (
-        // eslint-disable-next-line @next/next/no-img-element -- tiny avatar,
-        // not worth routing through the image optimizer
+        // eslint-disable-next-line @next/next/no-img-element -- tiny avatar, not worth the image optimizer
         <img
           src={session.user.image}
           alt=""

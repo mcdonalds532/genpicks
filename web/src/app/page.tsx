@@ -18,10 +18,18 @@ export default async function FixturesPage() {
 
   if (matches === null) {
     return (
-      <p className="text-sm text-muted">
-        The prediction API is not reachable. Start it with{" "}
-        <code className="font-mono">uvicorn genpicks.api.main:app</code>.
-      </p>
+      <div className="text-sm text-muted">
+        <p>
+          Fixtures are temporarily unavailable — the prediction API is not
+          responding. Try refreshing in a minute.
+        </p>
+        {process.env.NODE_ENV === "development" && (
+          <p className="mt-2">
+            Local dev: start the API with{" "}
+            <code className="font-mono">uvicorn genpicks.api.main:app</code>.
+          </p>
+        )}
+      </div>
     );
   }
   if (matches.length === 0) {

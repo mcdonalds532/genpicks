@@ -7,6 +7,7 @@
 
 import NextAuth from "next-auth";
 import GitHub from "next-auth/providers/github";
+import { cache } from "react";
 
 const API_URL = process.env.API_URL ?? "http://127.0.0.1:8000";
 
@@ -43,7 +44,7 @@ async function syncUser(input: SyncInput): Promise<number | null> {
   }
 }
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+const nextAuth = NextAuth({
   providers: [GitHub],
   session: { strategy: "jwt" },
   callbacks: {
@@ -73,3 +74,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
 });
+
+export const { handlers, signIn, signOut } = nextAuth;
+
+// generateMetadata and the page body both read the session on a match
+// view; without cache() each call decodes the JWT again and — while a
+// user's sign-in sync is still failing — repeats the syncUser POST.
+export const auth: typeof nextAuth.auth = cache(nextAuth.auth);

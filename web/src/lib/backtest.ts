@@ -119,6 +119,24 @@ export type SeasonStats = {
   marketAccuracy: number;
 };
 
+// Overall winner-pick accuracy on priced matches, computed over the same
+// filtered set in one place so the headline tile can never divide a
+// perSeason numerator by a cumulativeLoss denominator.
+export function overallAccuracy(matches: BacktestMatch[]): {
+  model: number;
+  market: number;
+} {
+  const ms = matches.filter((m) => m.p_market !== null);
+  const mean = (f: (m: BacktestMatch) => number) =>
+    ms.reduce((s, m) => s + f(m), 0) / ms.length;
+  return {
+    model: mean((m) => Number(m.p_model > 0.5 === Boolean(m.home_win))),
+    market: mean((m) =>
+      Number((m.p_market as number) > 0.5 === Boolean(m.home_win)),
+    ),
+  };
+}
+
 export function perSeason(matches: BacktestMatch[]): SeasonStats[] {
   const seasons = [...new Set(matches.map((m) => m.season))].sort();
   return seasons.map((season) => {
