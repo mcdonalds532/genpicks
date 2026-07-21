@@ -12,7 +12,6 @@ import {
   type PlayerMarketEntry,
 } from "@/lib/api";
 import { FactorBars } from "@/components/factor-bars";
-import { MarketOddsLine } from "@/components/market-odds";
 import { ProbBar } from "@/components/prob-bar";
 
 export const dynamic = "force-dynamic";
@@ -216,8 +215,8 @@ export default async function MatchPage({
             awayTeam={markets.away_team}
             home={markets.h2h.home}
             away={markets.h2h.away}
+            marketOdds={markets.market_odds}
           />
-          <MarketOddsLine odds={markets.market_odds} />
         </div>
       </div>
       {markets.h2h_explanation !== null && (

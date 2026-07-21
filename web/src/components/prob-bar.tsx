@@ -1,5 +1,19 @@
-import { formatOdds, formatPercent, type WinProbability } from "@/lib/api";
+import {
+  formatOdds,
+  formatPercent,
+  type MarketOdds,
+  type WinProbability,
+} from "@/lib/api";
 import { TeamLogo } from "@/components/team-logo";
+
+// Best available sportsbook price for one side, shown in parentheses right
+// after the model's own price so the two are read as a pair. Null whenever
+// there is no snapshot for that side — the model price then stands alone
+// rather than leaving a "—" placeholder.
+const marketPrice = (side: NonNullable<MarketOdds>["home"]) =>
+  side === null
+    ? null
+    : `($${formatOdds(side.price)}${side.bookmaker ? ` ${side.bookmaker}` : ""})`;
 
 // Roughly the height of the label row plus the bar, so the marks read as
 // bookends to the block rather than as a third row of their own.
@@ -14,16 +28,20 @@ export function ProbBar({
   awayTeam,
   home,
   away,
+  marketOdds,
 }: {
   homeTeam: string | null;
   awayTeam: string | null;
   home?: WinProbability;
   away?: WinProbability;
+  marketOdds?: MarketOdds;
 }) {
   if (!home || !away) {
     return <p className="text-sm text-muted">No prediction yet</p>;
   }
   const homePct = Math.round(home.probability * 1000) / 10;
+  const homeMarket = marketOdds ? marketPrice(marketOdds.home) : null;
+  const awayMarket = marketOdds ? marketPrice(marketOdds.away) : null;
   // The marks flank the whole block rather than sitting inline beside the
   // names, so the label row and the bar share one left and right edge:
   // each team's text lands over its own segment of the bar.
@@ -40,8 +58,19 @@ export function ProbBar({
             <span className="tabular-nums text-muted">
               ${formatOdds(home.implied_odds)}
             </span>
+            {homeMarket && (
+              <>
+                {" "}
+                <span className="tabular-nums text-muted">{homeMarket}</span>
+              </>
+            )}
           </span>
           <span className="min-w-0 truncate text-right">
+            {awayMarket && (
+              <>
+                <span className="tabular-nums text-muted">{awayMarket}</span>{" "}
+              </>
+            )}
             <span className="tabular-nums text-muted">
               ${formatOdds(away.implied_odds)}
             </span>{" "}

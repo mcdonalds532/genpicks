@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { formatMatchDate, getUpcoming } from "@/lib/api";
-import { MarketOddsLine } from "@/components/market-odds";
 import { ProbBar } from "@/components/prob-bar";
 
 export const dynamic = "force-dynamic";
@@ -60,8 +59,8 @@ export default async function FixturesPage() {
                 awayTeam={m.away_team}
                 home={m.win_probabilities?.home}
                 away={m.win_probabilities?.away}
+                marketOdds={m.market_odds}
               />
-              <MarketOddsLine odds={m.market_odds} />
             </Link>
           </li>
         ))}
