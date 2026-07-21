@@ -1,4 +1,5 @@
 import { formatOdds, formatPercent, type WinProbability } from "@/lib/api";
+import { TeamLogo } from "@/components/team-logo";
 
 // Two-segment win-probability bar. Identity is carried by the validated
 // home/away hues AND by always-visible text labels (the relief rule: the
@@ -23,10 +24,7 @@ export function ProbBar({
     <div>
       <div className="mb-1 flex items-baseline justify-between gap-4 text-sm">
         <span className="min-w-0 truncate">
-          <span
-            aria-hidden
-            className="mr-1.5 inline-block h-2 w-2 rounded-full bg-series-home align-baseline"
-          />
+          <TeamLogo team={homeTeam} side="home" className="mr-1.5" />
           <span className="font-medium">{homeTeam}</span>{" "}
           <span className="tabular-nums text-ink-2">
             {formatPercent(home.probability)}
@@ -43,10 +41,7 @@ export function ProbBar({
             {formatPercent(away.probability)}
           </span>{" "}
           <span className="font-medium">{awayTeam}</span>
-          <span
-            aria-hidden
-            className="ml-1.5 inline-block h-2 w-2 rounded-full bg-series-away align-baseline"
-          />
+          <TeamLogo team={awayTeam} side="away" className="ml-1.5" />
         </span>
       </div>
       <div

@@ -60,7 +60,7 @@ export function FactorBars({
                     />
                   )}
                 </span>
-                <span className="w-1/2">
+                <span className="flex w-1/2">
                   {!towardHome && (
                     <span
                       className="h-full rounded-r-[3px] bg-series-away"

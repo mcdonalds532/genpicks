@@ -128,3 +128,15 @@ export const formatPercent = (p: number) => `${(p * 100).toFixed(1)}%`;
 
 export const formatOdds = (odds: number | null) =>
   odds === null ? "—" : odds.toFixed(2);
+
+// Match dates arrive as bare "YYYY-MM-DD" (no zone). Anchoring at local
+// midnight keeps the displayed day from slipping backwards, which parsing
+// the bare string as UTC would do for anyone west of Greenwich.
+export const formatMatchDate = (iso: string | null) =>
+  iso === null
+    ? null
+    : new Date(`${iso}T00:00:00`).toLocaleDateString("en-AU", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      });

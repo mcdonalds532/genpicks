@@ -34,7 +34,9 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <header className="border-b border-hairline bg-surface">
-          <nav className="mx-auto flex max-w-4xl items-center gap-6 px-4 py-4">
+          {/* Wraps rather than overflowing: the five items need ~510px of
+              run, more than any phone gives us. */}
+          <nav className="mx-auto flex max-w-4xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-4 sm:gap-x-6">
             <Link href="/" className="text-lg font-semibold tracking-tight">
               GenPicks
             </Link>
@@ -63,7 +65,10 @@ export default function RootLayout({
           <p className="mx-auto max-w-4xl px-4 py-4 text-xs text-muted">
             GenPicks is a portfolio project for educational purposes and does
             not provide betting advice. Probabilities are model outputs, not
-            offers. If gambling is a problem for you or someone you know, call
+            offers. Club names and logos are the trademarks of their respective
+            clubs and are used here to identify teams; GenPicks is not
+            affiliated with, authorised by, or endorsed by the NRL or any club.
+            If gambling is a problem for you or someone you know, call
             1800 858 858 (Gambling Help Online).{" "}
             <Link href="/responsible-gambling" className="underline">
               Responsible gambling

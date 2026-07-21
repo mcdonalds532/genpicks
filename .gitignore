@@ -21,6 +21,9 @@ data/*.db
 node_modules/
 .next/
 
+# Local dev server logs
+*.log
+
 # OS / editor
 Thumbs.db
 .DS_Store

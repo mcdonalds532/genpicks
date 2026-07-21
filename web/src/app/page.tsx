@@ -1,17 +1,9 @@
 import Link from "next/link";
-import { getUpcoming } from "@/lib/api";
+import { formatMatchDate, getUpcoming } from "@/lib/api";
 import { MarketOddsLine } from "@/components/market-odds";
 import { ProbBar } from "@/components/prob-bar";
 
 export const dynamic = "force-dynamic";
-
-function formatDate(iso: string) {
-  return new Date(`${iso}T00:00:00`).toLocaleDateString("en-AU", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
-}
 
 export default async function FixturesPage() {
   const matches = await getUpcoming(20);
@@ -58,7 +50,7 @@ export default async function FixturesPage() {
             >
               <div className="mb-2 flex items-baseline justify-between text-xs text-muted">
                 <span>
-                  Round {m.round} · {formatDate(m.date)}
+                  Round {m.round} · {formatMatchDate(m.date)}
                   {m.venue ? ` · ${m.venue}` : ""}
                 </span>
                 <span>try markets →</span>

@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { auth, signIn } from "@/auth";
 import {
   createCheckoutUrl,
+  formatMatchDate,
   formatOdds,
   formatPercent,
   getMatchMarkets,
@@ -57,7 +58,7 @@ function MarketTable({
             <tr className="text-left text-xs text-muted">
               <th className="pb-2 font-normal">Player</th>
               <th className="pb-2 font-normal" aria-hidden />
-              <th className="pb-2 text-right font-normal">Prob.</th>
+              <th className="pb-2 pr-3 text-right font-normal">Prob.</th>
               <th className="pb-2 text-right font-normal">Odds</th>
             </tr>
           </thead>
@@ -72,9 +73,11 @@ function MarketTable({
                     }`}
                   />
                   {e.player}
-                  <span className="ml-1 text-xs text-muted">{e.team}</span>
+                  <span className="ml-1 whitespace-nowrap text-xs text-muted">
+                    {e.team}
+                  </span>
                 </td>
-                <td className="w-1/4 py-1.5 pr-3">
+                <td className="w-14 py-1.5 pr-3">
                   <div className="h-1.5 w-full">
                     <div
                       className="h-full rounded-[3px] bg-bar-hue"
@@ -82,7 +85,7 @@ function MarketTable({
                     />
                   </div>
                 </td>
-                <td className="py-1.5 text-right tabular-nums text-ink-2">
+                <td className="py-1.5 pr-3 text-right tabular-nums text-ink-2">
                   {formatPercent(e.probability)}
                 </td>
                 <td className="py-1.5 text-right tabular-nums">
@@ -199,7 +202,11 @@ export default async function MatchPage({
         </p>
       )}
       <div className="mb-6">
-        <p className="mb-1 text-xs text-muted">{markets.date}</p>
+        {markets.date !== null && (
+          <p className="mb-1 text-xs text-muted">
+            {formatMatchDate(markets.date)}
+          </p>
+        )}
         <h1 className="mb-4 text-xl font-semibold tracking-tight">
           {markets.home_team} v {markets.away_team}
         </h1>
