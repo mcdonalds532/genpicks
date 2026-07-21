@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { formatMatchDate, getUpcoming } from "@/lib/api";
+import { formatMatchDate, formatVenue, getUpcoming } from "@/lib/api";
 import { ProbBar } from "@/components/prob-bar";
 
 export const dynamic = "force-dynamic";
@@ -50,7 +50,7 @@ export default async function FixturesPage() {
               <div className="mb-2 flex items-baseline justify-between text-xs text-muted">
                 <span>
                   Round {m.round} · {formatMatchDate(m.date)}
-                  {m.venue ? ` · ${m.venue}` : ""}
+                  {m.venue ? ` · ${formatVenue(m.venue)}` : ""}
                 </span>
                 <span>Try Markets →</span>
               </div>

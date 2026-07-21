@@ -129,6 +129,15 @@ export const formatPercent = (p: number) => `${(p * 100).toFixed(1)}%`;
 export const formatOdds = (odds: number | null) =>
   odds === null ? "—" : odds.toFixed(2);
 
+// Venue names carry an internal disambiguation suffix when two source ids
+// share a display name — "Allianz (rlp 1096)" is the rebuilt Sydney
+// Football Stadium sitting next to the demolished one, both called
+// "Allianz" upstream. That suffix keeps the canonical name unique in the
+// database; it is not part of the stadium's name, so it is stripped here
+// rather than shown to readers.
+export const formatVenue = (venue: string | null) =>
+  venue === null ? null : venue.replace(/\s*\([a-z]+ \d+\)$/, "");
+
 // Match dates arrive as bare "YYYY-MM-DD" (no zone). Anchoring at local
 // midnight keeps the displayed day from slipping backwards, which parsing
 // the bare string as UTC would do for anyone west of Greenwich.
