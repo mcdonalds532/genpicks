@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Responsible gambling — GenPicks",
+  title: "Responsible Gambling — GenPicks",
   description:
     "GenPicks is an educational portfolio project, not a betting service. What our numbers are, what they are not, and where to find help.",
 };
@@ -14,7 +14,7 @@ export default function ResponsibleGamblingPage() {
   return (
     <div className="max-w-prose">
       <h1 className="mb-2 text-xl font-semibold tracking-tight">
-        Responsible gambling
+        Responsible Gambling
       </h1>
       <p className="mb-6 text-sm text-ink-2">
         GenPicks is a portfolio project built for educational purposes. It is

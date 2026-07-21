@@ -35,7 +35,7 @@ export default async function FixturesPage() {
     <div>
       <div className="mb-6 flex items-baseline justify-between">
         <h1 className="text-xl font-semibold tracking-tight">
-          Upcoming fixtures
+          Upcoming Fixtures
         </h1>
         {modelVersion && (
           <span className="text-xs text-muted">model {modelVersion}</span>
@@ -53,7 +53,7 @@ export default async function FixturesPage() {
                   Round {m.round} · {formatMatchDate(m.date)}
                   {m.venue ? ` · ${m.venue}` : ""}
                 </span>
-                <span>try markets →</span>
+                <span>Try Markets →</span>
               </div>
               <ProbBar
                 homeTeam={m.home_team}

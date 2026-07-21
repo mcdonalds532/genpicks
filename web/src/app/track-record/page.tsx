@@ -16,7 +16,7 @@ import {
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Track record — GenPicks",
+  title: "Track Record — GenPicks",
   description:
     "GenPicks backtest and live record: log loss versus bookmaker closing odds, calibration, and season-by-season results on held-out NRL seasons.",
 };
@@ -68,7 +68,7 @@ export default async function TrackRecordPage() {
   return (
     <div>
       <h1 className="mb-2 text-xl font-semibold tracking-tight">
-        Track record
+        Track Record
       </h1>
       <p className="mb-8 max-w-prose text-sm text-ink-2">
         Two kinds of evidence: a backtest on seasons the model never saw in
