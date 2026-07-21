@@ -11,6 +11,7 @@ import {
   type MatchMarkets,
   type PlayerMarketEntry,
 } from "@/lib/api";
+import { teamAbbr } from "@/lib/team-names";
 import { FactorBars } from "@/components/factor-bars";
 import { ProbBar } from "@/components/prob-bar";
 
@@ -72,8 +73,11 @@ function MarketTable({
                     }`}
                   />
                   {e.player}
-                  <span className="ml-1 whitespace-nowrap text-xs text-muted">
-                    {e.team}
+                  <span
+                    className="ml-1 whitespace-nowrap text-xs text-muted"
+                    title={e.team ?? undefined}
+                  >
+                    {teamAbbr(e.team)}
                   </span>
                 </td>
                 <td className="w-14 py-1.5 pr-3">

@@ -5,6 +5,7 @@ import {
   type WinProbability,
 } from "@/lib/api";
 import { TeamLogo } from "@/components/team-logo";
+import { teamNickname } from "@/lib/team-names";
 
 // Best available sportsbook price for one side, shown in parentheses right
 // after the model's own price so the two are read as a pair. Null whenever
@@ -40,6 +41,9 @@ export function ProbBar({
     return <p className="text-sm text-muted">No prediction yet</p>;
   }
   const homePct = Math.round(home.probability * 1000) / 10;
+  // Nicknames on the card, full names on hover and to assistive tech below.
+  const homeName = teamNickname(homeTeam);
+  const awayName = teamNickname(awayTeam);
   const homeMarket = marketOdds ? marketPrice(marketOdds.home) : null;
   const awayMarket = marketOdds ? marketPrice(marketOdds.away) : null;
   // The marks flank the whole block rather than sitting inline beside the
@@ -51,7 +55,9 @@ export function ProbBar({
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex items-baseline justify-between gap-4 text-sm">
           <span className="min-w-0 truncate">
-            <span className="font-medium">{homeTeam}</span>{" "}
+            <span className="font-medium" title={homeTeam ?? undefined}>
+              {homeName}
+            </span>{" "}
             <span className="tabular-nums text-ink-2">
               {formatPercent(home.probability)}
             </span>{" "}
@@ -77,7 +83,9 @@ export function ProbBar({
             <span className="tabular-nums text-ink-2">
               {formatPercent(away.probability)}
             </span>{" "}
-            <span className="font-medium">{awayTeam}</span>
+            <span className="font-medium" title={awayTeam ?? undefined}>
+              {awayName}
+            </span>
           </span>
         </div>
         <div
