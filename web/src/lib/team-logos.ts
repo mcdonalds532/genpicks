@@ -14,6 +14,16 @@ export const teamSlug = (team: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
+// The production and local databases do not agree on every teams.name:
+// production stores the bare "Cronulla" where the local dataset stores
+// "Cronulla Sutherland Sharks", so the slug alone missed the file and the
+// club showed its fallback dot on the deployed site only. Aliases map the
+// variants onto one filename rather than duplicating the asset — add here
+// if another club's name drifts between the two.
+const SLUG_ALIASES: Record<string, string> = {
+  cronulla: "cronulla-sutherland-sharks",
+};
+
 // Indexed once per server process: the directory is a handful of static
 // files that only change on deploy. In dev, restart to pick up new drops.
 let index: Map<string, string> | null = null;
@@ -51,5 +61,6 @@ function logoIndex(): Map<string, string> {
 /** Public URL of a club's mark, or null when no file has been supplied. */
 export function teamLogoSrc(team: string | null): string | null {
   if (team === null) return null;
-  return logoIndex().get(teamSlug(team)) ?? null;
+  const slug = teamSlug(team);
+  return logoIndex().get(SLUG_ALIASES[slug] ?? slug) ?? null;
 }
