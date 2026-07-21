@@ -12,6 +12,10 @@ frontend, live market odds, and official team lists driving the player
 markets, refreshed weekly by GitHub Actions. GitHub sign-in with a
 Stripe test-mode demo paywall gates the player try-scorer markets.
 
+![The GenPicks fixtures page: each upcoming match as a card with the model's
+win probability, its implied odds, and the best available bookmaker price
+beside it](docs/img/fixtures.png)
+
 Headline numbers on the held-out 2024–26 test seasons:
 
 - match winner: **0.6454 log loss — level with the bookmaker closing odds
@@ -32,6 +36,13 @@ backtest match by match — cumulative log loss against the market, a
 calibration plot, per-season breakdown — and the
 [methodology page](https://genpicks.vercel.app/methodology) explains how
 the models work in plain language.
+
+Every price is explained rather than asserted: the match page breaks the win
+probability into the factors that moved it, from the model's own SHAP values.
+
+![A GenPicks match page: the win-probability bar above a "why this price"
+panel breaking the prediction into team strength, recent form, lineup
+availability, rest, season stage, and travel](docs/img/match.png)
 
 ## Architecture
 
@@ -192,7 +203,37 @@ flag in Postgres → markets unlock. Env: the web app needs `AUTH_SECRET`,
 with anything but an `sk_test_` key, so the paywall stays a demo by
 construction.
 
-## Roadmap
+## What this doesn't claim
+
+The interesting parts of a modelling project are its limits, so they are
+stated here rather than buried:
+
+- **No demonstrated betting edge.** On the fixed test split the model matches
+  the closing line (0.6454 vs 0.6454) and beats it on accuracy; under
+  walk-forward validation it is *behind* pooled (0.6352 vs 0.6150), because
+  the market was much sharper in 2022–23. Matching an efficient market is the
+  honest result. Turning that into profit would also have to clear the
+  bookmaker's margin, which none of these numbers do.
+- **The test set is small.** 557 matches. A log-loss gap of a few thousandths
+  is not distinguishable from noise at that size, and the reported figures
+  carry no confidence intervals yet.
+- **The player try model barely beats its own prior.** Anytime-try log loss
+  is 0.4253 against 0.4274 for position priors alone — most of the signal is
+  "wingers and centres score tries," and the player-specific share adds
+  little on top. First try scorer is a genuine lift over a uniform lineup
+  (9.0% vs 2.9% top-1) but remains a mostly-noise market by nature.
+- **Feature coverage stops at what is freely scrapeable.** No minutes played,
+  weather, betting-market movement, or injury detail beyond what the official
+  team lists imply.
+
+Next, in rough order of what would actually move the numbers: bootstrap
+confidence intervals on every reported metric, so "level with the market"
+comes with an error bar; player minutes and positional interchange data to
+give the try model something the position prior does not already know; and
+market-movement features (opening vs closing drift) on the match-winner side.
+
+<details>
+<summary>Build log — the ten phases this was built in</summary>
 
 1. ~~Foundations: repo, schema, migrations~~
 2. ~~Data pipeline: scrapers, raw landing zone, validated transforms, backfill ~10 seasons~~
@@ -204,6 +245,14 @@ construction.
 8. ~~Auth + Stripe subscription gating~~
 9. ~~Deployment (Neon + Render + Vercel + weekly GitHub Actions refresh)~~
 10. ~~Responsible-gambling disclaimer page, docs polish~~
+
+</details>
+
+## License
+
+[MIT](LICENSE) for the code. Club marks in `web/public/logos/` are their
+clubs' trademarks and are excluded from that grant; match and odds data
+belong to their respective sources.
 
 > GenPicks is a portfolio project for educational purposes and does not
 > provide betting advice.
